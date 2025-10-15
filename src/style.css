@@ -1,0 +1,84 @@
+:root {
+  font-family: system-ui, sans-serif;
+  background: #f4f4f4;
+  color: #222;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#app {
+  width: min(640px, 100vw);
+  padding: 24px;
+}
+
+.capture {
+  display: grid;
+  gap: 16px;
+  text-align: center;
+}
+
+.preview {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+.actions {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
+
+video,
+img {
+  width: 100%;
+  background: #000;
+  display: block;
+  margin: 0 auto;
+}
+
+.preview video {
+  transform: scaleX(-1);
+}
+
+.video-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  background: #111;
+  color: #bbb;
+  min-height: 240px;
+  font-size: 14px;
+  margin: 0 auto;
+}
+
+button {
+  padding: 12px 18px;
+  border: none;
+  background: #005bbb;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  width: 50%;
+  margin: 0 auto;
+}
+
+button:disabled {
+  background: #888;
+  cursor: not-allowed;
+}
+
+.status {
+  min-height: 1.5em;
+  color: #555;
+}
+
+[hidden] {
+  display: none !important;
+}

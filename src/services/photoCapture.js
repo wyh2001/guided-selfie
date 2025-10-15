@@ -1,0 +1,139 @@
+export class PhotoCapture {
+	constructor() {
+		this.imageCapture = null
+		this.stream = null
+		this.currentPhotoURL = null
+		this.canvas = document.createElement('canvas')
+	}
+
+	/**
+	 * Initialize camera
+	 * @param {Object} options - Camera configuration
+	 * @returns {Promise<MediaStream>}
+	 */
+	async init(options = {}) {
+		const config = {
+			video: {
+				facingMode: options.facingMode || 'user',
+				width: { ideal: options.width || 3840 },
+				height: { ideal: options.height || 2160 },
+				frameRate: { ideal: options.frameRate || 30 },
+			},
+			audio: false,
+		}
+
+		if (this.stream) {
+			this._releaseStream()
+		}
+
+		this.stream = await navigator.mediaDevices.getUserMedia(config)
+		const [track] = this.stream.getVideoTracks()
+		this.imageCapture = new ImageCapture(track)
+
+		return this.stream
+	}
+
+	/**
+	 * Take a photo
+	 * @returns {Promise<string>} Returns the photo blob URL
+	 */
+	async capture() {
+		if (!this.imageCapture) {
+			throw new Error('Camera not initialized')
+		}
+
+		const frame = await this.imageCapture.grabFrame()
+		const blob = await this._bitmapToBlob(frame)
+
+		this.clearPhoto()
+		this.currentPhotoURL = URL.createObjectURL(blob)
+		return this.currentPhotoURL
+	}
+
+	/**
+	 * Download the photo
+	 * @param {string} filename - Filename (optional)
+	 */
+	download(filename) {
+		if (!this.currentPhotoURL) {
+			throw new Error('No photo to download')
+		}
+
+		const link = document.createElement('a')
+		link.href = this.currentPhotoURL
+		link.download = filename || `photo-${Date.now()}.jpg`
+		link.click()
+	}
+
+	/**
+	 * Clear current photo
+	 */
+	clearPhoto() {
+		if (this.currentPhotoURL) {
+			URL.revokeObjectURL(this.currentPhotoURL)
+			this.currentPhotoURL = null
+		}
+	}
+
+	/**
+	 * Release all resources
+	 */
+	dispose() {
+		this.clearPhoto()
+		this._releaseStream()
+	}
+
+	/**
+	 * Get current photo URL
+	 */
+	getPhotoURL() {
+		return this.currentPhotoURL
+	}
+
+	/**
+	 * Stop current media stream if it exists
+	 * @private
+	 */
+	_releaseStream() {
+		if (this.stream) {
+			this.stream.getTracks().forEach(track => track.stop())
+			this.stream = null
+		}
+		this.imageCapture = null
+	}
+
+	/**
+	 * Convert ImageBitmap to Blob
+	 * @private
+	 */
+	async _bitmapToBlob(bitmap) {
+		const canvas = this.canvas
+		canvas.width = bitmap.width
+		canvas.height = bitmap.height
+
+		const ctx = canvas.getContext('2d')
+		if (!ctx) {
+			bitmap.close?.()
+			throw new Error('Canvas unavailable')
+		}
+
+		ctx.clearRect(0, 0, canvas.width, canvas.height)
+		ctx.save()
+		// Mirror horizontally for selfie capture
+		ctx.translate(canvas.width, 0)
+		ctx.scale(-1, 1)
+		ctx.drawImage(bitmap, 0, 0)
+		ctx.restore()
+		bitmap.close?.()
+
+		return new Promise((resolve, reject) => {
+			canvas.toBlob((blob) => {
+				if (!blob) {
+					reject(new Error('Failed to convert frame'))
+					return
+				}
+				resolve(blob)
+			}, 'image/jpeg', 1.0)
+		})
+	}
+}
