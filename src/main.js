@@ -1,3 +1,24 @@
+/* AI usage disclosure: 
+
+Around 60% of the code in this file is written by AI
+(up till when the commit with this disclosure is pushed).
+
+The overall structure is designed and developed by human.
+
+Github Copilot is used to generate the initial HTML and the CSS, then modified to fit the desired style.
+
+Some autocomplete suggestions given by Github Copilots are taken, especially for
+those repeated code patterns.
+
+ChatGPT is used to give suggestions about how to refactor the state management, and
+the statemachine pattern is written with the help of Github Copilot. 
+
+This disclosure itself is written by human, but some autocomplete suggestions 
+given by Github Copilot are taken.
+
+This will be updated over time when the project evolves.
+
+*/
 import './style.css'
 import { PhotoCapture } from './services/photoCapture.js'
 
