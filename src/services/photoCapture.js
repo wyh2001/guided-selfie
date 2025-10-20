@@ -14,10 +14,10 @@ export class PhotoCapture {
 	async init(options = {}) {
 		const config = {
 			video: {
-				facingMode: options.facingMode || 'user',
-				width: { ideal: options.width || 3840 },
-				height: { ideal: options.height || 2160 },
-				frameRate: { ideal: options.frameRate || 30 },
+				facingMode: options.facingMode ?? 'user',
+				width: { ideal: options.width ?? 3840 },
+				height: { ideal: options.height ?? 2160 },
+				frameRate: { ideal: options.frameRate ?? 30 },
 			},
 			audio: false,
 		}
