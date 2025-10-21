@@ -21,174 +21,177 @@ given by GitHub Copilot are taken.
 This will be updated over time when the project evolves.
 
 */
-import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision"
+import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 
 const DEFAULT_MODEL =
-    "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
-const DEFAULT_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+	"https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
+const DEFAULT_WASM =
+	"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
 
 export class FaceDetect {
-    constructor() {
-        this.detector = null
-        this.mode = null
-        this.detections = []
-        this.video = null
-        this.rafId = null // requestAnimationFrame ID
-        this.lastVideoTime = -1
-    }
+	constructor() {
+		this.detector = null;
+		this.mode = null;
+		this.detections = [];
+		this.video = null;
+		this.rafId = null; // requestAnimationFrame ID
+		this.lastVideoTime = -1;
+	}
 
-    /**
-     * Initialize the face detector
-     * @param {Object} options - Configuration options
-     * @returns {Promise<FaceDetector>}
-     */
-    async init(options = {}) {
-        if (this.detector) {
-            return this.detector // Already initialized
-        }
+	/**
+	 * Initialize the face detector
+	 * @param {Object} options - Configuration options
+	 * @returns {Promise<FaceDetector>}
+	 */
+	async init(options = {}) {
+		if (this.detector) {
+			return this.detector; // Already initialized
+		}
 
-        this.mode = options.runningMode ?? "VIDEO"
-        const vision = await FilesetResolver.forVisionTasks(options.wasmPath ?? DEFAULT_WASM)
-        this.detector = await FaceDetector.createFromOptions(vision, {
-            baseOptions: {
-                modelAssetPath: options.modelAssetPath ?? DEFAULT_MODEL,
-                delegate: options.delegate ?? "GPU"
-            },
-            runningMode: this.mode,
-            minDetectionConfidence: options.minDetectionConfidence ?? 0.5,
-            minSuppressionThreshold: options.minSuppressionThreshold ?? 0.3
-        })
+		this.mode = options.runningMode ?? "VIDEO";
+		const vision = await FilesetResolver.forVisionTasks(
+			options.wasmPath ?? DEFAULT_WASM,
+		);
+		this.detector = await FaceDetector.createFromOptions(vision, {
+			baseOptions: {
+				modelAssetPath: options.modelAssetPath ?? DEFAULT_MODEL,
+				delegate: options.delegate ?? "GPU",
+			},
+			runningMode: this.mode,
+			minDetectionConfidence: options.minDetectionConfidence ?? 0.5,
+			minSuppressionThreshold: options.minSuppressionThreshold ?? 0.3,
+		});
 
-        return this.detector
-    }
+		return this.detector;
+	}
 
-    /**
-     * Detect faces in an image
-     * @param {HTMLImageElement} image - The image element
-     * @returns {Promise<Array>} Array of detected faces
-     */
-    async detectImage(image) {
-        if (!this.detector) {
-            throw new Error("Face detector not initialized")
-        }
+	/**
+	 * Detect faces in an image
+	 * @param {HTMLImageElement} image - The image element
+	 * @returns {Promise<Array>} Array of detected faces
+	 */
+	async detectImage(image) {
+		if (!this.detector) {
+			throw new Error("Face detector not initialized");
+		}
 
-        if (!image) {
-            throw new Error("Image element is required")
-        }
+		if (!image) {
+			throw new Error("Image element is required");
+		}
 
-        await this._useMode("IMAGE")
-        const result = this.detector.detect(image)
-        this.detections = result?.detections ?? []
-        return this.detections
-    }
+		await this._useMode("IMAGE");
+		const result = this.detector.detect(image);
+		this.detections = result?.detections ?? [];
+		return this.detections;
+	}
 
-    /**
-     * Detect faces in a video frame
-     * @param {HTMLVideoElement} video - The video element
-     * @returns {Promise<Array>} Array of detected faces
-     */
-    async detectVideo(video) {
-        if (!this.detector) {
-            throw new Error("Face detector not initialized")
-        }
+	/**
+	 * Detect faces in a video frame
+	 * @param {HTMLVideoElement} video - The video element
+	 * @returns {Promise<Array>} Array of detected faces
+	 */
+	async detectVideo(video) {
+		if (!this.detector) {
+			throw new Error("Face detector not initialized");
+		}
 
-        if (!video) {
-            throw new Error("Video element is required")
-        }
+		if (!video) {
+			throw new Error("Video element is required");
+		}
 
-        await this._useMode("VIDEO")
-        if (this.lastVideoTime === video.currentTime) {
-            return this.detections
-        }
+		await this._useMode("VIDEO");
+		if (this.lastVideoTime === video.currentTime) {
+			return this.detections;
+		}
 
-        this.lastVideoTime = video.currentTime
-        const result = this.detector.detectForVideo(video, performance.now())
-        this.detections = result?.detections ?? []
-        return this.detections
-    }
+		this.lastVideoTime = video.currentTime;
+		const result = this.detector.detectForVideo(video, performance.now());
+		this.detections = result?.detections ?? [];
+		return this.detections;
+	}
 
-    /**
-     * Start real-time face detection on a video element
-     * @param {HTMLVideoElement} video - The video element
-     * @param {Function} onResults - Callback function to handle results
-     * @param {Function} onError - Callback function to handle errors
-     */
-    async start(video, onResults = null, onError = null) {
-        if (!this.detector) {
-            throw new Error("Face detector not initialized")
-        }
+	/**
+	 * Start real-time face detection on a video element
+	 * @param {HTMLVideoElement} video - The video element
+	 * @param {Function} onResults - Callback function to handle results
+	 * @param {Function} onError - Callback function to handle errors
+	 */
+	async start(video, onResults = null, onError = null) {
+		if (!this.detector) {
+			throw new Error("Face detector not initialized");
+		}
 
-        if (!video) {
-            throw new Error("Video element is required")
-        }
+		if (!video) {
+			throw new Error("Video element is required");
+		}
 
-        this.video = video
-        await this._useMode("VIDEO")
+		this.video = video;
+		await this._useMode("VIDEO");
 
-        const processFrame = async () => {
-            try {
-                await this.detectVideo(this.video)
-                if (onResults) {
-                    onResults(this.detections) // TBD: what to pass
-                }
-            } catch (error) {
-                if (onError) {
-                    onError(error)
-                } else {
-                    console.error("Face detection error:", error)
-                }
-            }
-            this.rafId = requestAnimationFrame(processFrame) // Loop
-        }
+		const processFrame = async () => {
+			try {
+				await this.detectVideo(this.video);
+				if (onResults) {
+					onResults(this.detections); // TBD: what to pass
+				}
+			} catch (error) {
+				if (onError) {
+					onError(error);
+				} else {
+					console.error("Face detection error:", error);
+				}
+			}
+			this.rafId = requestAnimationFrame(processFrame); // Loop
+		};
 
-        this.rafId = requestAnimationFrame(processFrame)
-    }
+		this.rafId = requestAnimationFrame(processFrame);
+	}
 
-    /**
-     * Stop real-time face detection
-     */
-    stop() {
-        if (this.rafId !== null) {
-            cancelAnimationFrame(this.rafId)
-            this.rafId = null
-        }
+	/**
+	 * Stop real-time face detection
+	 */
+	stop() {
+		if (this.rafId !== null) {
+			cancelAnimationFrame(this.rafId);
+			this.rafId = null;
+		}
 
-        this.video = null
-        this.lastVideoTime = -1
-    }
+		this.video = null;
+		this.lastVideoTime = -1;
+	}
 
-    /**
-     * Get the latest detections
-     * @returns {Array} Array of detected faces
-     */
-    getDetections() {
-        return this.detections
-    }
+	/**
+	 * Get the latest detections
+	 * @returns {Array} Array of detected faces
+	 */
+	getDetections() {
+		return this.detections;
+	}
 
-    /**
-     * Release all resources
-     */
-    dispose() {
-        this.stop()
-        this.detector?.close?.()
-        this.detector = null
-        this.detections = []
-        this.mode = null
-        this.onResults = null
-        this.onError = null
-    }
+	/**
+	 * Release all resources
+	 */
+	dispose() {
+		this.stop();
+		this.detector?.close?.();
+		this.detector = null;
+		this.detections = [];
+		this.mode = null;
+		this.onResults = null;
+		this.onError = null;
+	}
 
-    /**
-     * Switch running mode
-     * @param {string} mode - "IMAGE" or "VIDEO"
-     * @private
-     */
-    async _useMode(mode) {
-        if (this.mode === mode) {
-            return
-        }
+	/**
+	 * Switch running mode
+	 * @param {string} mode - "IMAGE" or "VIDEO"
+	 * @private
+	 */
+	async _useMode(mode) {
+		if (this.mode === mode) {
+			return;
+		}
 
-        await this.detector.setOptions({ runningMode: mode })
-        this.mode = mode
-    }
+		await this.detector.setOptions({ runningMode: mode });
+		this.mode = mode;
+	}
 }

@@ -18,11 +18,11 @@ This will be updated over time when the project evolves.
 */
 export class PhotoCapture {
 	constructor() {
-		this.imageCapture = null
-		this.stream = null
-		this.currentPhotoURL = null
-		this.canvas = document.createElement('canvas')
-		this.facingMode = null
+		this.imageCapture = null;
+		this.stream = null;
+		this.currentPhotoURL = null;
+		this.canvas = document.createElement("canvas");
+		this.facingMode = null;
 	}
 
 	/**
@@ -33,25 +33,25 @@ export class PhotoCapture {
 	async init(options = {}) {
 		const config = {
 			video: {
-				facingMode: options.facingMode ?? 'user',
+				facingMode: options.facingMode ?? "user",
 				width: { ideal: options.width ?? 3840 },
 				height: { ideal: options.height ?? 2160 },
 				frameRate: { ideal: options.frameRate ?? 30 },
 			},
 			audio: false,
-		}
+		};
 
-		this.facingMode = config.video.facingMode
+		this.facingMode = config.video.facingMode;
 
 		if (this.stream) {
-			this._releaseStream()
+			this._releaseStream();
 		}
 
-		this.stream = await navigator.mediaDevices.getUserMedia(config)
-		const [track] = this.stream.getVideoTracks()
-		this.imageCapture = new ImageCapture(track)
+		this.stream = await navigator.mediaDevices.getUserMedia(config);
+		const [track] = this.stream.getVideoTracks();
+		this.imageCapture = new ImageCapture(track);
 
-		return this.stream
+		return this.stream;
 	}
 
 	/**
@@ -60,15 +60,15 @@ export class PhotoCapture {
 	 */
 	async capture() {
 		if (!this.imageCapture) {
-			throw new Error('Camera not initialized')
+			throw new Error("Camera not initialized");
 		}
 
-		const frame = await this.imageCapture.grabFrame()
-		const blob = await this._bitmapToBlob(frame)
+		const frame = await this.imageCapture.grabFrame();
+		const blob = await this._bitmapToBlob(frame);
 
-		this.clearPhoto()
-		this.currentPhotoURL = URL.createObjectURL(blob)
-		return this.currentPhotoURL
+		this.clearPhoto();
+		this.currentPhotoURL = URL.createObjectURL(blob);
+		return this.currentPhotoURL;
 	}
 
 	/**
@@ -77,13 +77,13 @@ export class PhotoCapture {
 	 */
 	download(filename) {
 		if (!this.currentPhotoURL) {
-			throw new Error('No photo to download')
+			throw new Error("No photo to download");
 		}
 
-		const link = document.createElement('a')
-		link.href = this.currentPhotoURL
-		link.download = filename || `photo-${Date.now()}.jpg`
-		link.click()
+		const link = document.createElement("a");
+		link.href = this.currentPhotoURL;
+		link.download = filename || `photo-${Date.now()}.jpg`;
+		link.click();
 	}
 
 	/**
@@ -91,8 +91,8 @@ export class PhotoCapture {
 	 */
 	clearPhoto() {
 		if (this.currentPhotoURL) {
-			URL.revokeObjectURL(this.currentPhotoURL)
-			this.currentPhotoURL = null
+			URL.revokeObjectURL(this.currentPhotoURL);
+			this.currentPhotoURL = null;
 		}
 	}
 
@@ -100,15 +100,15 @@ export class PhotoCapture {
 	 * Release all resources
 	 */
 	dispose() {
-		this.clearPhoto()
-		this._releaseStream()
+		this.clearPhoto();
+		this._releaseStream();
 	}
 
 	/**
 	 * Get current photo URL
 	 */
 	getPhotoURL() {
-		return this.currentPhotoURL
+		return this.currentPhotoURL;
 	}
 
 	/**
@@ -117,10 +117,10 @@ export class PhotoCapture {
 	 */
 	_releaseStream() {
 		if (this.stream) {
-			this.stream.getTracks().forEach(track => track.stop())
-			this.stream = null
+			this.stream.getTracks().forEach((track) => void track.stop());
+			this.stream = null;
 		}
-		this.imageCapture = null
+		this.imageCapture = null;
 	}
 
 	/**
@@ -128,35 +128,39 @@ export class PhotoCapture {
 	 * @private
 	 */
 	async _bitmapToBlob(bitmap) {
-		const canvas = this.canvas
-		canvas.width = bitmap.width
-		canvas.height = bitmap.height
+		const canvas = this.canvas;
+		canvas.width = bitmap.width;
+		canvas.height = bitmap.height;
 
-		const ctx = canvas.getContext('2d')
+		const ctx = canvas.getContext("2d");
 		if (!ctx) {
-			bitmap.close?.()
-			throw new Error('Canvas unavailable')
+			bitmap.close?.();
+			throw new Error("Canvas unavailable");
 		}
 
-		ctx.clearRect(0, 0, canvas.width, canvas.height)
-		ctx.save()
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx.save();
 		// Mirror horizontally for selfie capture
-		if (this.facingMode === 'user') {
-			ctx.translate(canvas.width, 0)
-			ctx.scale(-1, 1)
+		if (this.facingMode === "user") {
+			ctx.translate(canvas.width, 0);
+			ctx.scale(-1, 1);
 		}
-		ctx.drawImage(bitmap, 0, 0)
-		ctx.restore()
-		bitmap.close?.()
+		ctx.drawImage(bitmap, 0, 0);
+		ctx.restore();
+		bitmap.close?.();
 
 		return new Promise((resolve, reject) => {
-			canvas.toBlob((blob) => {
-				if (!blob) {
-					reject(new Error('Failed to convert frame'))
-					return
-				}
-				resolve(blob)
-			}, 'image/jpeg', 1.0)
-		})
+			canvas.toBlob(
+				(blob) => {
+					if (!blob) {
+						reject(new Error("Failed to convert frame"));
+						return;
+					}
+					resolve(blob);
+				},
+				"image/jpeg",
+				1.0,
+			);
+		});
 	}
 }
