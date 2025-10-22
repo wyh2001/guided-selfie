@@ -178,8 +178,6 @@ export class FaceDetect {
 		this.detector = null;
 		this.detections = [];
 		this.mode = null;
-		this.onResults = null;
-		this.onError = null;
 	}
 
 	/**
