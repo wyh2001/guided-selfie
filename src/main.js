@@ -1,6 +1,6 @@
 /* AI usage disclosure: 
 
-Around 60% of the code in this file is written with AI assistance
+Around 50% of the code in this file is written with AI assistance
 (up till when the commit with this disclosure is pushed).
 
 The overall structure is designed and developed by human.
@@ -173,13 +173,13 @@ async function setupCamera() {
 	try {
 		const stream = await photoService.init();
 		video.srcObject = stream;
-		
+
 		if (photoService.getFacingMode() === "user") {
 			video.style.transform = "scaleX(-1)";
 		} else {
 			video.style.transform = "none";
 		}
-		
+
 		setState(State.CAMERA_READY);
 		await faceService.init();
 		setState(State.READY, "Look at the camera");
@@ -198,7 +198,7 @@ function handleDetections(detections) {
 // https://ai.google.dev/edge/api/mediapipe/js/tasks-vision.boundingbox
 function generateDebugInfo(detections, videoWidth, videoHeight) {
 	let debugInfo = `Video size: ${videoWidth}x${videoHeight}\n`;
-	
+
 	detections.forEach((detection, index) => {
 		const boundingBox = detection.boundingBox;
 		debugInfo += `Detect face ${index + 1} at [${boundingBox.originX}, ${boundingBox.originY}] with width ${boundingBox.width}, height ${boundingBox.height} and angle ${boundingBox.angle}\n`;
