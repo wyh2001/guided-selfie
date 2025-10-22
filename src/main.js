@@ -188,18 +188,17 @@ async function setupCamera() {
 	}
 }
 
-// Refers to the official MediaPipe Face Detection demo: https://codepen.io/mediapipe-preview/pen/OJByWQr
 function handleDetections(detections) {
-	debug.textContent = "";
-	let debugInfo = "";
 	const videoWidth = video.videoWidth;
 	const videoHeight = video.videoHeight;
-	debugInfo += `Video size: ${videoWidth}x${videoHeight}\n`;
-	faceBoxElements.forEach((e) => void e.remove());
-	faceBoxElements.length = 0;
-	const ratio = preview.clientWidth / videoWidth;
+	debug.textContent = generateDebugInfo(detections, videoWidth, videoHeight);
+	drawFaceBoxes(detections, videoWidth);
+}
 
-	// https://ai.google.dev/edge/api/mediapipe/js/tasks-vision.boundingbox
+// https://ai.google.dev/edge/api/mediapipe/js/tasks-vision.boundingbox
+function generateDebugInfo(detections, videoWidth, videoHeight) {
+	let debugInfo = `Video size: ${videoWidth}x${videoHeight}\n`;
+	
 	detections.forEach((detection, index) => {
 		const boundingBox = detection.boundingBox;
 		debugInfo += `Detect face ${index + 1} at [${boundingBox.originX}, ${boundingBox.originY}] with width ${boundingBox.width}, height ${boundingBox.height} and angle ${boundingBox.angle}\n`;
@@ -210,7 +209,18 @@ function handleDetections(detections) {
 			const y = keypoint.y * videoHeight;
 			debugInfo += `keypoint ${kpIndex + 1} at [${x.toFixed(2)}, ${y.toFixed(2)}]\n`;
 		});
+	});
+	return debugInfo;
+}
 
+// Refers to the official MediaPipe Face Detection demo: https://codepen.io/mediapipe-preview/pen/OJByWQr
+function drawFaceBoxes(detections, videoWidth) {
+	faceBoxElements.forEach((e) => void e.remove());
+	faceBoxElements.length = 0;
+	const ratio = preview.clientWidth / videoWidth;
+
+	detections.forEach((detection) => {
+		const boundingBox = detection.boundingBox;
 		const faceBoxElement = document.createElement("div");
 		faceBoxElement.className = "face-box";
 		faceBoxElement.style.left = `${(videoWidth - (boundingBox.originX + boundingBox.width)) * ratio}px`;
@@ -220,7 +230,6 @@ function handleDetections(detections) {
 		preview.appendChild(faceBoxElement);
 		faceBoxElements.push(faceBoxElement);
 	});
-	debug.textContent = debugInfo;
 }
 
 captureBtn.addEventListener("click", async () => {
