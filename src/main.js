@@ -170,6 +170,13 @@ async function setupCamera() {
 	try {
 		const stream = await photoService.init();
 		video.srcObject = stream;
+		
+		if (photoService.getFacingMode() === "user") {
+			video.style.transform = "scaleX(-1)";
+		} else {
+			video.style.transform = "none";
+		}
+		
 		setState(State.CAMERA_READY);
 		await faceService.init();
 		setState(State.READY, "Look at the camera");

@@ -57,9 +57,6 @@ img {
 	margin: 0 auto;
 }
 
-.preview video {
-	transform: scaleX(-1);
-}
 
 .video-placeholder {
 	display: grid;

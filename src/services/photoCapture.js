@@ -112,6 +112,13 @@ export class PhotoCapture {
 	}
 
 	/**
+	 * Get current facing mode
+	 */
+	getFacingMode() {
+		return this.facingMode;
+	}
+
+	/**
 	 * Stop current media stream if it exists
 	 * @private
 	 */
