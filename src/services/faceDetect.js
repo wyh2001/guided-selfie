@@ -90,7 +90,7 @@ export class FaceDetect {
 	 * @param {HTMLVideoElement} video - The video element
 	 * @returns {Promise<Array>} Array of detected faces
 	 */
-	async detectVideo(video) {
+	async detectVideo(video, interval = 1) {
 		if (!this.detector) {
 			throw new Error("Face detector not initialized");
 		}
@@ -100,7 +100,7 @@ export class FaceDetect {
 		}
 
 		await this._useMode("VIDEO");
-		if (this.lastVideoTime === video.currentTime) {
+		if (video.currentTime - this.lastVideoTime < interval) {
 			return this.detections;
 		}
 
