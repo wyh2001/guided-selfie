@@ -41,6 +41,7 @@ body {
 	display: grid;
 	gap: 12px;
 	justify-items: center;
+	position: relative;
 }
 
 .actions {
@@ -56,7 +57,6 @@ img {
 	display: block;
 	margin: 0 auto;
 }
-
 
 .video-placeholder {
 	display: grid;
@@ -96,6 +96,11 @@ button:disabled {
 	color: #555;
 	white-space: pre-wrap;
 	margin: 0;
+}
+
+.face-box {
+	position: absolute;
+	border: 2px solid #00ff00;
 }
 
 [hidden] {

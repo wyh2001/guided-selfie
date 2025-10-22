@@ -53,6 +53,9 @@ const downloadBtn = app.querySelector('[data-action="download"]');
 const status = app.querySelector(".status");
 const debug = app.querySelector(".debug");
 const placeholder = app.querySelector(".video-placeholder");
+const preview = app.querySelector(".preview");
+
+const faceBoxElements = [];
 
 const defaultPlaceholderText = placeholder.textContent;
 
@@ -192,6 +195,9 @@ function handleDetections(detections) {
 	const videoWidth = video.videoWidth;
 	const videoHeight = video.videoHeight;
 	debugInfo += `Video size: ${videoWidth}x${videoHeight}\n`;
+	faceBoxElements.forEach((e) => void e.remove());
+	faceBoxElements.length = 0;
+	const ratio = preview.clientWidth / videoWidth;
 
 	// https://ai.google.dev/edge/api/mediapipe/js/tasks-vision.boundingbox
 	detections.forEach((detection, index) => {
@@ -204,6 +210,15 @@ function handleDetections(detections) {
 			const y = keypoint.y * videoHeight;
 			debugInfo += `keypoint ${kpIndex + 1} at [${x.toFixed(2)}, ${y.toFixed(2)}]\n`;
 		});
+
+		const faceBoxElement = document.createElement("div");
+		faceBoxElement.className = "face-box";
+		faceBoxElement.style.left = `${(videoWidth - (boundingBox.originX + boundingBox.width)) * ratio}px`;
+		faceBoxElement.style.top = `${boundingBox.originY * ratio}px`;
+		faceBoxElement.style.width = `${boundingBox.width * ratio}px`;
+		faceBoxElement.style.height = `${boundingBox.height * ratio}px`;
+		preview.appendChild(faceBoxElement);
+		faceBoxElements.push(faceBoxElement);
 	});
 	debug.textContent = debugInfo;
 }
