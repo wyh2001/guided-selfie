@@ -20,10 +20,12 @@ This will be updated over time when the project evolves.
 
 */
 import "./style.css";
+import { FaceDetect } from "./services/faceDetect.js";
 import { PhotoCapture } from "./services/photoCapture.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
+const faceService = new FaceDetect();
 
 app.innerHTML = `
   <main class="capture">
@@ -39,6 +41,7 @@ app.innerHTML = `
       <button type="button" data-action="download" hidden disabled>Download</button>
     </section>
     <p class="status"></p>
+	<p class="debug"></p>
   </main>
 `;
 
@@ -48,6 +51,7 @@ const captureBtn = app.querySelector('[data-action="capture"]');
 const retakeBtn = app.querySelector('[data-action="retake"]');
 const downloadBtn = app.querySelector('[data-action="download"]');
 const status = app.querySelector(".status");
+const debug = app.querySelector(".debug");
 const placeholder = app.querySelector(".video-placeholder");
 
 const defaultPlaceholderText = placeholder.textContent;
@@ -61,6 +65,7 @@ const setVisible = (element, visible) => {
 
 const State = {
 	LOADING: "loading",
+	CAMERA_READY: "camera_ready",
 	READY: "ready",
 	CAPTURED: "captured",
 	ERROR: "error",
@@ -77,6 +82,17 @@ const stateView = {
 		downloadDisabled: true,
 		placeholderText: defaultPlaceholderText,
 		message: "Awaiting camera…",
+	},
+	[State.CAMERA_READY]: {
+		video: true,
+		photo: false,
+		placeholder: false,
+		capture: false,
+		retake: false,
+		download: false,
+		downloadDisabled: true,
+		placeholderText: defaultPlaceholderText,
+		message: "Initializing face detector...",
 	},
 	[State.READY]: {
 		video: true,
@@ -119,6 +135,22 @@ const setState = (state, overrideMessage) => {
 		return;
 	}
 
+	switch (state) {
+		case State.LOADING:
+		case State.CAMERA_READY:
+			break;
+		case State.READY:
+			faceService.start(video, handleDetections, (error) => {
+				console.error("Face detection error:", error);
+			});
+			break;
+		case State.CAPTURED:
+		case State.ERROR:
+			debug.textContent = "";
+			faceService.stop();
+			break;
+	}
+
 	setVisible(video, view.video);
 	setVisible(photo, view.photo);
 	setVisible(placeholder, view.placeholder);
@@ -138,10 +170,35 @@ async function setupCamera() {
 	try {
 		const stream = await photoService.init();
 		video.srcObject = stream;
+		setState(State.CAMERA_READY);
+		await faceService.init();
 		setState(State.READY, "Look at the camera");
 	} catch (error) {
 		setState(State.ERROR, `Camera unavailable: ${error.message}`);
 	}
+}
+
+// Refers to the official MediaPipe Face Detection demo: https://codepen.io/mediapipe-preview/pen/OJByWQr
+function handleDetections(detections) {
+	debug.textContent = "";
+	let debugInfo = "";
+	const videoWidth = video.videoWidth;
+	const videoHeight = video.videoHeight;
+	debugInfo += `Video size: ${videoWidth}x${videoHeight}\n`;
+
+	// https://ai.google.dev/edge/api/mediapipe/js/tasks-vision.boundingbox
+	detections.forEach((detection, index) => {
+		const boundingBox = detection.boundingBox;
+		debugInfo += `Detect face ${index + 1} at [${boundingBox.originX}, ${boundingBox.originY}] with width ${boundingBox.width}, height ${boundingBox.height} and angle ${boundingBox.angle}\n`;
+		const keypoints = detection.keypoints;
+		debugInfo += `Keypoints:\n`;
+		keypoints.forEach((keypoint, kpIndex) => {
+			const x = keypoint.x * videoWidth;
+			const y = keypoint.y * videoHeight;
+			debugInfo += `keypoint ${kpIndex + 1} at [${x.toFixed(2)}, ${y.toFixed(2)}]\n`;
+		});
+	});
+	debug.textContent = debugInfo;
 }
 
 captureBtn.addEventListener("click", async () => {

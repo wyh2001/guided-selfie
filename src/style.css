@@ -91,6 +91,14 @@ button:disabled {
 .status {
 	min-height: 1.5em;
 	color: #555;
+	margin: 0;
+}
+
+.debug {
+	min-height: 1.5em;
+	color: #555;
+	white-space: pre-wrap;
+	margin: 0;
 }
 
 [hidden] {
