@@ -151,6 +151,8 @@ const setState = (state, overrideMessage) => {
 		case State.ERROR:
 			debug.textContent = "";
 			faceService.stop();
+			faceBoxElements.forEach((e) => void e.remove());
+			faceBoxElements.length = 0;
 			break;
 	}
 
