@@ -303,7 +303,7 @@ const faceDistance = {
 
 function evaluateFacePosition(detections, videoWidth, videoHeight) {
 	if (detections.length === 0) {
-		return null;
+		return [];
 	}
 	const evals = [];
 	detections.forEach((detection) => {
