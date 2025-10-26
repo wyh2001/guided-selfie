@@ -103,6 +103,13 @@ button:disabled {
 	border: 2px solid #00ff00;
 }
 
+.key-point {
+	position: absolute;
+	width: 5px;
+	height: 5px;
+	background: #ff0000;
+}
+
 [hidden] {
 	display: none !important;
 }
