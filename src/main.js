@@ -312,13 +312,13 @@ function evaluateFacePosition(detections, videoWidth, videoHeight) {
 
 		let position = facePosition.CENTERED;
 		const horizontalOffsetThreshold = 0.1;
-		const positionUpThreshold = 0.5;
+		const positionTopThreshold = 0.5;
 		const positionBottomThreshold = 0.65;
 		if (normalizedCenterX < 0.5 - horizontalOffsetThreshold) {
 			position = facePosition.LEFT;
 		} else if (normalizedCenterX > 0.5 + horizontalOffsetThreshold) {
 			position = facePosition.RIGHT;
-		} else if (normalizedCenterY < positionUpThreshold) {
+		} else if (normalizedCenterY < positionTopThreshold) {
 			position = facePosition.TOP;
 		} else if (normalizedCenterY > positionBottomThreshold) {
 			position = facePosition.BOTTOM;
