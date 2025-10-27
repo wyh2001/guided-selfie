@@ -197,7 +197,7 @@ function handleDetections(detections) {
 	drawFaceBoxes(detections, videoWidth, videoHeight);
 	const evals = evaluateFacePosition(detections, videoWidth, videoHeight);
 	evals.forEach((evaluation, index) => {
-		debug.textContent += `Face ${index + 1}: position: ${evaluation.position}, distance: ${evaluation.distance}\n`;
+		debug.textContent += `Face ${index + 1}: position: ${evaluation.positions.join("-")}, distance: ${evaluation.distance}\n`;
 	});
 }
 
@@ -310,30 +310,35 @@ function evaluateFacePosition(detections, videoWidth, videoHeight) {
 		const { normalizedCenterX, normalizedCenterY, normalizedSize } =
 			computeDetectionContext(detection, videoWidth, videoHeight);
 
-		let position = facePosition.CENTERED;
+		const positions = [];
 		const horizontalOffsetThreshold = 0.1;
 		const positionTopThreshold = 0.5;
 		const positionBottomThreshold = 0.65;
 		if (normalizedCenterX < 0.5 - horizontalOffsetThreshold) {
-			position = facePosition.LEFT;
+			positions.push(facePosition.LEFT);
 		} else if (normalizedCenterX > 0.5 + horizontalOffsetThreshold) {
-			position = facePosition.RIGHT;
-		} else if (normalizedCenterY < positionTopThreshold) {
-			position = facePosition.TOP;
+			positions.push(facePosition.RIGHT);
+		}
+		if (normalizedCenterY < positionTopThreshold) {
+			positions.push(facePosition.TOP);
 		} else if (normalizedCenterY > positionBottomThreshold) {
-			position = facePosition.BOTTOM;
+			positions.push(facePosition.BOTTOM);
+		}
+
+		if (positions.length === 0) {
+			positions.push(facePosition.CENTERED);
 		}
 
 		let distance = faceDistance.NORMAL;
-		const sizeCloseThreshold = 0.2;
-		const sizeFarThreshold = 0.1;
+		const sizeCloseThreshold = 0.17;
+		const sizeFarThreshold = 0.09;
 		if (normalizedSize > sizeCloseThreshold) {
 			distance = faceDistance.CLOSE;
 		} else if (normalizedSize < sizeFarThreshold) {
 			distance = faceDistance.FAR;
 		}
 
-		evals.push({ position, distance });
+		evals.push({ positions, distance });
 	});
 	return evals;
 }
