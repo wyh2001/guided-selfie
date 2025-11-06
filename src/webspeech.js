@@ -1,8 +1,6 @@
 // src/webspeech.js
 // Web Speech API integration for guided-selfie
 // Listens for simple voice commands (take photo, capture, snap, start, stop, help, zoom in/out, left/right).
-// Non-invasive: will try to use app's capture button ([data-action="capture"]) or window.takePhoto()/window.photoService.capture().
-// Uses SpeechSynthesis for optional spoken feedback if the TTS checkbox is enabled in the small UI below.
 
 (function () {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -114,3 +112,65 @@
     listening = false;
     micBtn.setAttribute('aria-pressed', 'false');
     setStatus('off');
+  };
+
+  function startListening() {
+    if (listening) return;
+    try {
+      recognition.lang = (langEl && langEl.value) || 'en-US';
+      recognition.start();
+      listening = true;
+      micBtn.setAttribute('aria-pressed', 'true');
+      setStatus('listening...');
+    } catch (e) {
+      console.warn('SpeechRecognition start error', e);
+      setStatus('error');
+    }
+  }
+
+  function stopListening() {
+    if (!listening) return;
+    recognition.stop();
+    listening = false;
+    micBtn.setAttribute('aria-pressed', 'false');
+    setStatus('off');
+  }
+
+  micBtn.addEventListener('click', () => {
+    if (listening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  });
+
+  langEl.addEventListener('change', () => {
+    recognition.lang = langEl.value;
+    speakIfEnabled('Language set to ' + langEl.options[langEl.selectedIndex].text);
+  });
+
+  // Placeholder implementations for external actions - you can replace these
+  function doCapture(command) {
+    console.log('[voice] doCapture called with command:', command);
+    speakIfEnabled('Taking photo');
+    // Try triggering app capture button or window functions
+    const btn = document.querySelector('[data-action="capture"]');
+    if (btn) {
+      btn.click();
+    } else if (window.takePhoto) {
+      window.takePhoto();
+    } else if (window.photoService && typeof window.photoService.capture === 'function') {
+      window.photoService.capture();
+    } else {
+      console.warn('No capture method found.');
+    }
+  }
+
+  function dispatchVoiceCommand(cmd) {
+    console.log('[voice] dispatchVoiceCommand:', cmd);
+    speakIfEnabled(`Command ${cmd} executed`);
+    // Implement actual logic to handle commands like zoom or left/right movement here
+    // For example, dispatch custom events, call other functions, etc.
+  }
+
+})();
