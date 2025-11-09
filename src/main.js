@@ -46,8 +46,8 @@ app.innerHTML = `
 			data-action="capture"
 			aria-label="Take photo"
 		></button>
-		<button type="button" data-action="retake" hidden>Retake</button>
-		<button type="button" data-action="download" hidden disabled>Download</button>
+		<button type="button" data-action="retake" aria-label="Retake photo" hidden>Retake</button>
+		<button type="button" data-action="download" aria-label="Download photo" hidden disabled>Download</button>
 	</div>
 `;
 
