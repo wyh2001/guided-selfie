@@ -1,0 +1,17 @@
+name: Run a11y test
+
+on:
+  deployment_status:
+
+jobs:
+  a11y:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Use Node.js 24
+      uses: actions/setup-node@v4
+      with:
+        node-version: 24
+    - name: Run pa11y
+      run: npx --yes pa11y "${{ github.event.deployment_status.target_url }}" --threshold 0
