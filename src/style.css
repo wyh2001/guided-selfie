@@ -48,6 +48,7 @@ body {
 	gap: 12px;
 	justify-items: center;
 	position: relative;
+	overflow: hidden;
 }
 
 .actions {
