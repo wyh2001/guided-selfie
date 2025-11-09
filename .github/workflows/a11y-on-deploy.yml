@@ -6,7 +6,7 @@ on:
 jobs:
   a11y:
     if: github.event.deployment_status.state == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
     - name: Use Node.js 24
