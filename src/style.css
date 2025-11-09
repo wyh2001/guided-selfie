@@ -14,7 +14,7 @@ This will be updated over time when the project evolves.
 */
 :root {
 	font-family: system-ui, sans-serif;
-	background: #f4f4f4;
+	background: #000;
 	color: #222;
 }
 
@@ -28,7 +28,6 @@ body {
 
 #app {
 	width: min(640px, 100vw);
-	padding: 24px;
 }
 
 .capture {
@@ -112,4 +111,28 @@ button:disabled {
 
 [hidden] {
 	display: none !important;
+}
+
+.bottom-bar {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	width: 100%;
+	height: 150px;
+	background-color: black;
+	z-index: 10;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+.capture-button {
+	width: 70px;
+	height: 70px;
+	background-color: white;
+	border-radius: 50%;
+	border: 2px solid black;
+	box-shadow: 0 0 0 2px white;
+	padding: 0;
+	cursor: pointer;
 }

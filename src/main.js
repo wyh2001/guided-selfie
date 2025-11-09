@@ -29,20 +29,26 @@ const faceService = new FaceDetect();
 
 app.innerHTML = `
   <main class="capture">
-    <h1>Guided Selfie</h1>
     <section class="preview">
       <div class="video-placeholder">Awaiting camera…</div>
       <video autoplay playsinline hidden></video>
       <img alt="snapshot" hidden />
     </section>
     <section class="actions">
-      <button type="button" data-action="capture">Take photo</button>
       <button type="button" data-action="retake" hidden>Retake</button>
       <button type="button" data-action="download" hidden disabled>Download</button>
     </section>
-    <p class="status"></p>
-	<p class="debug"></p>
+    <p class="status" hidden></p>
+	<p class="debug" hidden></p>
   </main>
+  	<div class="bottom-bar">
+		<button
+			type="button"
+			class="capture-button"
+			data-action="capture"
+			aria-label="Take photo"
+		></button>
+	</div>
 `;
 
 const video = app.querySelector("video");
