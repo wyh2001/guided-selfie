@@ -35,8 +35,6 @@ app.innerHTML = `
       <img alt="snapshot" hidden />
     </section>
     <section class="actions">
-      <button type="button" data-action="retake" hidden>Retake</button>
-      <button type="button" data-action="download" hidden disabled>Download</button>
     </section>
     <p class="status" hidden></p>
 	<p class="debug" hidden></p>
@@ -48,6 +46,8 @@ app.innerHTML = `
 			data-action="capture"
 			aria-label="Take photo"
 		></button>
+		<button type="button" data-action="retake" hidden>Retake</button>
+		<button type="button" data-action="download" hidden disabled>Download</button>
 	</div>
 `;
 
@@ -169,6 +169,7 @@ const setState = (state, overrideMessage) => {
 	setVisible(downloadBtn, view.download);
 
 	captureBtn.disabled = !view.capture;
+	captureBtn.hidden = state === State.CAPTURED;
 	downloadBtn.disabled = view.downloadDisabled;
 
 	placeholder.textContent = view.placeholderText;

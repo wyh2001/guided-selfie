@@ -143,3 +143,19 @@ button:disabled {
 	padding: 0;
 	cursor: pointer;
 }
+
+.bottom-bar button[data-action="retake"],
+.bottom-bar button[data-action="download"] {
+	width: auto;
+	min-width: 80px;
+	background: #fff;
+	color: black;
+	font-size: 20px;
+	font-weight: bold;
+}
+
+.bottom-bar button[data-action="download"][disabled] {
+	background: #eee;
+	color: #666;
+	cursor: not-allowed;
+}
