@@ -141,8 +141,6 @@ button:disabled {
 	border-radius: 50%;
 	border: 2px solid black;
 	box-shadow: 0 0 0 2px white;
-	padding: 0;
-	cursor: pointer;
 }
 
 .bottom-bar button[data-action="retake"],
@@ -158,5 +156,4 @@ button:disabled {
 .bottom-bar button[data-action="download"][disabled] {
 	background: #eee;
 	color: #666;
-	cursor: not-allowed;
 }
