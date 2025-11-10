@@ -145,6 +145,18 @@ button:disabled {
 	cursor: pointer;
 }
 
+.album-button {
+	position: absolute;
+	left: 10%;
+	width: 54px;
+	height: 54px;
+	border-radius: 50%;
+	border: 2px solid #fff;
+	background: transparent;
+	background-size: cover;
+	background-position: center;
+}
+
 .bottom-bar button[data-action="retake"],
 .bottom-bar button[data-action="download"] {
 	width: auto;

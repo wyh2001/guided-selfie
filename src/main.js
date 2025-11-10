@@ -42,6 +42,12 @@ app.innerHTML = `
   	<div class="bottom-bar">
 		<button
 			type="button"
+			class="album-button"
+			data-action="album"
+			aria-label="Open album"
+		></button>
+		<button
+			type="button"
 			class="capture-button"
 			data-action="capture"
 			aria-label="Take photo"
