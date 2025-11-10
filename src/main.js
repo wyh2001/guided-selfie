@@ -76,6 +76,7 @@ const setVisible = (element, visible) => {
 		return;
 	}
 	element.hidden = !visible;
+	element.setAttribute("aria-hidden", visible ? "false" : "true");
 };
 
 const State = {
@@ -155,6 +156,7 @@ const setState = (state, overrideMessage) => {
 		case State.CAMERA_READY:
 			break;
 		case State.READY:
+			faceService.stop();
 			faceService.start(video, handleDetections, (error) => {
 				console.error("Face detection error:", error);
 			});
@@ -383,6 +385,7 @@ downloadBtn.addEventListener("click", () => {
 
 window.addEventListener("beforeunload", () => {
 	photoService.dispose();
+	faceService.dispose();
 	video.srcObject = null;
 });
 
