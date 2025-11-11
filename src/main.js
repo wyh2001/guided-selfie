@@ -39,6 +39,21 @@ app.innerHTML = `
     <p class="status" hidden></p>
 	<p class="debug" hidden></p>
   </main>
+  <section class="album-view" hidden>
+    <div class="album-header">
+      <button type="button" data-action="back-to-camera" aria-label="Back to camera">← Back</button>
+    </div>
+    <div class="album-viewer">
+      <div class="album-placeholder" role="status" hidden>
+        <p>No photos yet</p>
+        <p>Take a photo to get started</p>
+      </div>
+      <button type="button" class="album-nav-btn album-prev" data-action="prev-photo" aria-label="Previous photo">‹</button>
+      <img class="album-photo" alt="Photo">
+      <button type="button" class="album-nav-btn album-next" data-action="next-photo" aria-label="Next photo">›</button>
+      <div class="album-counter" role="status" aria-live="polite"></div>
+    </div>
+  </section>
   	<div class="bottom-bar">
 		<button
 			type="button"
@@ -52,22 +67,29 @@ app.innerHTML = `
 			data-action="capture"
 			aria-label="Take photo"
 		></button>
-		<button type="button" data-action="retake" aria-label="Retake photo" hidden>Retake</button>
-		<button type="button" data-action="download" aria-label="Download photo" hidden disabled>Download</button>
 	</div>
 `;
 
 const video = app.querySelector("video");
 const photo = app.querySelector("img");
 const captureBtn = app.querySelector('[data-action="capture"]');
-const retakeBtn = app.querySelector('[data-action="retake"]');
-const downloadBtn = app.querySelector('[data-action="download"]');
 const status = app.querySelector(".status");
 const debug = app.querySelector(".debug");
 const placeholder = app.querySelector(".video-placeholder");
 const preview = app.querySelector(".preview");
+const albumBtn = app.querySelector(".album-button");
+const albumView = app.querySelector(".album-view");
+const albumPhoto = app.querySelector(".album-photo");
+const albumCounter = app.querySelector(".album-counter");
+const albumPlaceholder = app.querySelector(".album-placeholder");
+const prevBtn = app.querySelector('[data-action="prev-photo"]');
+const nextBtn = app.querySelector('[data-action="next-photo"]');
+const backBtn = app.querySelector('[data-action="back-to-camera"]');
+const captureView = app.querySelector(".capture");
 
 const faceBoxElements = [];
+const storedPhotos = []; // (photoURL, timestamp) pairs
+let currentPhotoIndex = 0;
 
 const defaultPlaceholderText = placeholder.textContent;
 
@@ -83,8 +105,9 @@ const State = {
 	LOADING: "loading",
 	CAMERA_READY: "camera_ready",
 	READY: "ready",
-	CAPTURED: "captured",
 	ERROR: "error",
+	ALBUM_EMPTY: "album_empty",
+	ALBUM_NOT_EMPTY: "album_not_empty",
 };
 
 const stateView = {
@@ -93,9 +116,8 @@ const stateView = {
 		photo: false,
 		placeholder: true,
 		capture: false,
-		retake: false,
-		download: false,
-		downloadDisabled: true,
+		captureView: true,
+		albumView: false,
 		placeholderText: defaultPlaceholderText,
 		message: "Awaiting camera…",
 	},
@@ -104,9 +126,8 @@ const stateView = {
 		photo: false,
 		placeholder: false,
 		capture: false,
-		retake: false,
-		download: false,
-		downloadDisabled: true,
+		captureView: true,
+		albumView: false,
 		placeholderText: defaultPlaceholderText,
 		message: "Initializing face detector...",
 	},
@@ -115,33 +136,40 @@ const stateView = {
 		photo: false,
 		placeholder: false,
 		capture: true,
-		retake: false,
-		download: false,
-		downloadDisabled: true,
+		captureView: true,
+		albumView: false,
 		placeholderText: defaultPlaceholderText,
 		message: "Look at the camera",
-	},
-	[State.CAPTURED]: {
-		video: false,
-		photo: true,
-		placeholder: false,
-		capture: false,
-		retake: true,
-		download: true,
-		downloadDisabled: false,
-		placeholderText: defaultPlaceholderText,
-		message: "Done. Snap again?",
 	},
 	[State.ERROR]: {
 		video: false,
 		photo: false,
 		placeholder: true,
 		capture: false,
-		retake: false,
-		download: false,
-		downloadDisabled: true,
+		captureView: true,
+		albumView: false,
 		placeholderText: "Camera unavailable",
 		message: "Camera unavailable",
+	},
+	[State.ALBUM_EMPTY]: {
+		video: false,
+		photo: false,
+		placeholder: false,
+		capture: false,
+		captureView: false,
+		albumView: true,
+		placeholderText: defaultPlaceholderText,
+		message: "No photos yet",
+	},
+	[State.ALBUM_NOT_EMPTY]: {
+		video: false,
+		photo: false,
+		placeholder: false,
+		capture: false,
+		captureView: false,
+		albumView: true,
+		placeholderText: defaultPlaceholderText,
+		message: "Browse your photos",
 	},
 };
 
@@ -161,24 +189,37 @@ const setState = (state, overrideMessage) => {
 				console.error("Face detection error:", error);
 			});
 			break;
-		case State.CAPTURED:
 		case State.ERROR:
 			debug.textContent = "";
 			faceService.stop();
 			faceBoxElements.forEach((e) => void e.remove());
 			faceBoxElements.length = 0;
 			break;
+		case State.ALBUM_EMPTY:
+			currentPhotoIndex = 0;
+			faceService.stop();
+			setAlbumVisibility(false);
+			break;
+		case State.ALBUM_NOT_EMPTY:
+			faceService.stop();
+			if (storedPhotos.length === 0) {
+				setAlbumVisibility(false);
+				break;
+			}
+			setAlbumVisibility(true);
+			updateAlbumPhoto();
+			break;
 	}
 
+	setVisible(captureView, view.captureView);
+	setVisible(albumView, view.albumView);
 	setVisible(video, view.video);
 	setVisible(photo, view.photo);
 	setVisible(placeholder, view.placeholder);
-	setVisible(retakeBtn, view.retake);
-	setVisible(downloadBtn, view.download);
 
 	captureBtn.disabled = !view.capture;
-	captureBtn.hidden = state === State.CAPTURED;
-	downloadBtn.disabled = view.downloadDisabled;
+	setVisible(captureBtn, !view.albumView);
+	setVisible(albumBtn, !view.albumView);
 
 	placeholder.textContent = view.placeholderText;
 	status.textContent = overrideMessage ?? view.message;
@@ -302,6 +343,61 @@ function drawFaceBoxes(detections, videoWidth, videoHeight) {
 	});
 }
 
+// album helper functions
+function refreshAlbumThumbnail() {
+	if (storedPhotos.length === 0) {
+		albumBtn.style.backgroundImage = "none";
+		return;
+	}
+	const latestPhotoURL = storedPhotos[storedPhotos.length - 1][0];
+	albumBtn.style.backgroundImage = `url(${latestPhotoURL})`;
+}
+
+function setAlbumVisibility(hasPhotos) {
+	setVisible(albumPlaceholder, !hasPhotos);
+	setVisible(albumPhoto, hasPhotos);
+	setVisible(prevBtn, hasPhotos);
+	setVisible(nextBtn, hasPhotos);
+	setVisible(albumCounter, hasPhotos);
+	if (!hasPhotos) {
+		albumPhoto.removeAttribute("src");
+		albumPhoto.alt = "";
+		albumCounter.textContent = "";
+		prevBtn.disabled = true;
+		nextBtn.disabled = true;
+	}
+}
+
+function updateAlbumPhoto() {
+	if (storedPhotos.length === 0) {
+		return;
+	}
+	if (currentPhotoIndex < 0) currentPhotoIndex = 0;
+	if (currentPhotoIndex > storedPhotos.length - 1)
+		currentPhotoIndex = storedPhotos.length - 1;
+
+	const actualIndex = storedPhotos.length - 1 - currentPhotoIndex;
+	const [url, timestamp] = storedPhotos[actualIndex];
+	albumPhoto.src = url;
+	albumPhoto.alt = `Photo ${currentPhotoIndex + 1} taken at ${new Date(timestamp).toLocaleString()}`;
+	albumCounter.textContent = `${currentPhotoIndex + 1} / ${storedPhotos.length}`;
+	prevBtn.disabled = currentPhotoIndex === 0;
+	nextBtn.disabled = currentPhotoIndex === storedPhotos.length - 1;
+}
+
+function initializeAlbumView(startIndex = 0) {
+	if (storedPhotos.length === 0) {
+		currentPhotoIndex = 0;
+		setState(State.ALBUM_EMPTY);
+		return;
+	}
+	currentPhotoIndex = startIndex;
+	if (currentPhotoIndex < 0) currentPhotoIndex = 0;
+	if (currentPhotoIndex > storedPhotos.length - 1)
+		currentPhotoIndex = storedPhotos.length - 1;
+	setState(State.ALBUM_NOT_EMPTY);
+}
+
 const facePosition = {
 	CENTERED: "centered",
 	LEFT: "left",
@@ -362,24 +458,36 @@ captureBtn.addEventListener("click", async () => {
 	try {
 		status.textContent = "Capturing…";
 		const photoURL = await photoService.capture();
-		photo.src = photoURL;
-		setState(State.CAPTURED, "Done. Snap again?");
+		storedPhotos.push([photoURL, Date.now()]);
+		refreshAlbumThumbnail();
+		status.textContent = "Photo saved";
+		setTimeout(() => {
+			status.textContent = "Look at the camera";
+		}, 1000);
 	} catch (error) {
 		status.textContent = `Capture failed: ${error.message}`;
 	}
 });
 
-retakeBtn.addEventListener("click", () => {
-	photoService.clearPhoto();
-	photo.removeAttribute("src");
+albumBtn.addEventListener("click", () => {
+	initializeAlbumView(0);
+});
+
+backBtn.addEventListener("click", () => {
 	setState(State.READY, "Look at the camera");
 });
 
-downloadBtn.addEventListener("click", () => {
-	try {
-		photoService.download(`selfie-${Date.now()}.jpg`);
-	} catch (error) {
-		status.textContent = error.message;
+prevBtn.addEventListener("click", () => {
+	if (currentPhotoIndex > 0) {
+		currentPhotoIndex--;
+		updateAlbumPhoto();
+	}
+});
+
+nextBtn.addEventListener("click", () => {
+	if (currentPhotoIndex < storedPhotos.length - 1) {
+		currentPhotoIndex++;
+		updateAlbumPhoto();
 	}
 });
 
