@@ -54,20 +54,20 @@ app.innerHTML = `
       <div class="album-counter" role="status" aria-live="polite"></div>
     </div>
   </section>
-  	<div class="bottom-bar">
-		<button
-			type="button"
-			class="album-button"
-			data-action="album"
-			aria-label="Open album"
-		></button>
-		<button
-			type="button"
-			class="capture-button"
-			data-action="capture"
-			aria-label="Take photo"
-		></button>
-	</div>
+    <div class="bottom-bar">
+      <button
+        type="button"
+        class="album-button"
+        data-action="album"
+        aria-label="Open album"
+      ></button>
+      <button
+        type="button"
+        class="capture-button"
+        data-action="capture"
+        aria-label="Take photo"
+      ></button>
+    </div>
 `;
 
 const video = app.querySelector("video");
