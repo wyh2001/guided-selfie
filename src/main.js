@@ -40,9 +40,9 @@ app.innerHTML = `
 	<p class="debug" hidden></p>
   </main>
   <section class="album-view" hidden>
-    <div class="album-header">
+    <header class="album-header">
       <button type="button" data-action="back-to-camera" aria-label="Back to camera">← Back</button>
-    </div>
+    </header>
     <div class="album-viewer">
       <div class="album-placeholder" role="status" hidden>
         <p>No photos yet</p>
@@ -54,7 +54,7 @@ app.innerHTML = `
       <div class="album-counter" role="status" aria-live="polite"></div>
     </div>
   </section>
-    <div class="bottom-bar">
+    <div class="bottom-bar" role="toolbar" aria-label="Camera controls">
       <button
         type="button"
         class="album-button"
