@@ -98,6 +98,7 @@ const setVisible = (element, visible) => {
 		return;
 	}
 	element.hidden = !visible;
+	element.setAttribute("aria-hidden", visible ? "false" : "true");
 };
 
 const State = {
