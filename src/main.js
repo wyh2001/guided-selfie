@@ -20,8 +20,8 @@ This will be updated over time when the project evolves.
 
 */
 import "./style.css";
-import { FaceDetect } from "./services/faceDetect.js";
-import { PhotoCapture } from "./services/photoCapture.js";
+import { FaceDetect } from "./services/face-detect.js";
+import { PhotoCapture } from "./services/photo-capture.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
