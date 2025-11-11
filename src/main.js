@@ -76,6 +76,24 @@ const captureBtn = app.querySelector('[data-action="capture"]');
 const status = app.querySelector(".status");
 const debug = app.querySelector(".debug");
 const placeholder = app.querySelector(".video-placeholder");
+
+// Expose safe hooks for external integrations (e.g., the web speech module).
+// These are minimal and only reference existing objects.
+window.captureBtn = captureBtn; // optional, already available via selector in webspeech.js fallback
+window.takePhoto = async function () {
+  // Simulate user click to preserve existing behavior & event listeners
+  if (captureBtn) {
+    captureBtn.click();
+    return;
+  }
+  // if not present, try photoService
+  if (window.photoService && typeof window.photoService.capture === 'function') {
+    await window.photoService.capture();
+    return;
+  }
+  console.warn('takePhoto() called but no capture handler found.');
+};
+
 const preview = app.querySelector(".preview");
 const albumBtn = app.querySelector(".album-button");
 const albumView = app.querySelector(".album-view");
@@ -502,3 +520,13 @@ window.addEventListener("beforeunload", () => {
 });
 
 setupCamera();
+
+// If photoService variable exists in this module's scope, expose it so webspeech can call it directly.
+if (typeof photoService !== 'undefined') {
+  window.photoService = photoService;
+}
+
+// Import the voice module (no need to modify index.html)
+// This ensures the voice UI is available and can bind to existing DOM.
+import('./webspeech.js').catch((e) => console.warn('Failed to load webspeech module', e));
+
