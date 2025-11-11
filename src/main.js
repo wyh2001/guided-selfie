@@ -88,7 +88,11 @@ const backBtn = app.querySelector('[data-action="back-to-camera"]');
 const captureView = app.querySelector(".capture");
 
 const faceBoxElements = [];
-const storedPhotos = []; // (photoURL, timestamp) pairs
+/**
+ * Array of stored photos. Each entry is a tuple of [photoURL: string, timestamp: number]
+ * @type {Array<[string, number]>}
+ */
+const storedPhotos = [];
 let currentPhotoIndex = 0;
 
 const defaultPlaceholderText = placeholder.textContent;
