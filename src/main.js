@@ -22,9 +22,11 @@ This will be updated over time when the project evolves.
 import "./style.css";
 import { FaceDetect } from "./services/face-detect.js";
 import { PhotoCapture } from "./services/photo-capture.js";
+import { PhotoStore } from "./services/photo-store.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
+const photoStore = new PhotoStore();
 const faceService = new FaceDetect();
 
 app.innerHTML = `
@@ -41,7 +43,8 @@ app.innerHTML = `
   </main>
   <section class="album-view" hidden>
     <header class="album-header">
-      <button type="button" data-action="back-to-camera" aria-label="Back to camera">← Back</button>
+      <button type="button" data-action="back-to-camera" aria-label="Back to camera">Back</button>
+      <button type="button" class="album-delete-btn" data-action="delete-photo" aria-label="Delete current photo">Delete</button>
     </header>
     <div class="album-viewer">
       <div class="album-placeholder" role="status" hidden>
@@ -85,12 +88,17 @@ const albumPlaceholder = app.querySelector(".album-placeholder");
 const prevBtn = app.querySelector('[data-action="prev-photo"]');
 const nextBtn = app.querySelector('[data-action="next-photo"]');
 const backBtn = app.querySelector('[data-action="back-to-camera"]');
+const deleteBtn = app.querySelector('[data-action="delete-photo"]');
 const captureView = app.querySelector(".capture");
+
+albumPhoto.addEventListener("error", () => {
+	console.warn("Failed to load image:", albumPhoto.src);
+});
 
 const faceBoxElements = [];
 /**
- * Array of stored photos. Each entry is a tuple of [photoURL: string, timestamp: number]
- * @type {Array<[string, number]>}
+ * Array of stored photos. Each entry is an object { id: number, url: string, createdAt: number }
+ * @type {Array<{id: number, url: string, createdAt: number}>}
  */
 const storedPhotos = [];
 let currentPhotoIndex = 0;
@@ -250,6 +258,21 @@ async function setupCamera() {
 	}
 }
 
+async function loadStoredPhotos() {
+	try {
+		const items = await photoStore.getAllPhotos();
+		// Ensure stable order regardless of backend/index implementation
+		items.sort((a, b) => a.createdAt - b.createdAt);
+		items.forEach((item) => {
+			const url = URL.createObjectURL(item.blob);
+			storedPhotos.push({ id: item.id, url, createdAt: item.createdAt });
+		});
+		refreshAlbumThumbnail();
+	} catch (error) {
+		console.error("Failed to load stored photos:", error);
+	}
+}
+
 function handleDetections(detections) {
 	const videoWidth = video.videoWidth;
 	const videoHeight = video.videoHeight;
@@ -353,7 +376,7 @@ function refreshAlbumThumbnail() {
 		albumBtn.style.backgroundImage = "none";
 		return;
 	}
-	const latestPhotoURL = storedPhotos[storedPhotos.length - 1][0];
+	const latestPhotoURL = storedPhotos[storedPhotos.length - 1].url;
 	albumBtn.style.backgroundImage = `url(${latestPhotoURL})`;
 }
 
@@ -381,9 +404,9 @@ function updateAlbumPhoto() {
 		currentPhotoIndex = storedPhotos.length - 1;
 
 	const actualIndex = storedPhotos.length - 1 - currentPhotoIndex;
-	const [url, timestamp] = storedPhotos[actualIndex];
+	const { url, createdAt } = storedPhotos[actualIndex];
 	albumPhoto.src = url;
-	albumPhoto.alt = `Photo ${currentPhotoIndex + 1} taken at ${new Date(timestamp).toLocaleString()}`;
+	albumPhoto.alt = `Photo ${currentPhotoIndex + 1} taken at ${new Date(createdAt).toLocaleString()}`;
 	albumCounter.textContent = `${currentPhotoIndex + 1} / ${storedPhotos.length}`;
 	prevBtn.disabled = currentPhotoIndex === 0;
 	nextBtn.disabled = currentPhotoIndex === storedPhotos.length - 1;
@@ -461,9 +484,18 @@ function evaluateFacePosition(detections, videoWidth, videoHeight) {
 captureBtn.addEventListener("click", async () => {
 	try {
 		status.textContent = "Capturing…";
-		const photoURL = await photoService.capture();
-		storedPhotos.push([photoURL, Date.now()]);
-		refreshAlbumThumbnail();
+		const { blob } = await photoService.captureWithBlob();
+		const url = URL.createObjectURL(blob);
+		try {
+			const { id, createdAt } = await photoStore.addPhoto(blob);
+			storedPhotos.push({ id, url, createdAt });
+			refreshAlbumThumbnail();
+		} catch (storageError) {
+			console.error("Failed to persist photo:", storageError);
+			try {
+				URL.revokeObjectURL(url);
+			} catch (_) {}
+		}
 		status.textContent = "Photo saved";
 		setTimeout(() => {
 			status.textContent = "Look at the camera";
@@ -495,10 +527,55 @@ nextBtn.addEventListener("click", () => {
 	}
 });
 
+deleteBtn.addEventListener("click", async () => {
+	if (storedPhotos.length === 0) {
+		return;
+	}
+
+	const confirmDelete = confirm(
+		"Delete this photo permanently? This action cannot be undone.",
+	);
+	if (!confirmDelete) {
+		return;
+	}
+
+	const actualIndex = storedPhotos.length - 1 - currentPhotoIndex;
+	const { id, url } = storedPhotos[actualIndex];
+	try {
+		if (id !== undefined) {
+			await photoStore.deletePhoto(id);
+		}
+	} catch (err) {
+		console.error("Failed to delete photo from storage:", err);
+	}
+	try {
+		URL.revokeObjectURL(url);
+	} catch (_) {}
+	storedPhotos.splice(actualIndex, 1);
+
+	if (storedPhotos.length === 0) {
+		currentPhotoIndex = 0;
+		setState(State.ALBUM_EMPTY);
+		refreshAlbumThumbnail();
+		return;
+	}
+	if (currentPhotoIndex > storedPhotos.length - 1) {
+		currentPhotoIndex = storedPhotos.length - 1;
+	}
+	refreshAlbumThumbnail();
+	setState(State.ALBUM_NOT_EMPTY);
+});
+
 window.addEventListener("beforeunload", () => {
 	photoService.dispose();
 	faceService.dispose();
 	video.srcObject = null;
+	storedPhotos.forEach(({ url }) => {
+		URL.revokeObjectURL(url);
+	});
 });
 
-setupCamera();
+(async () => {
+	await loadStoredPhotos();
+	setupCamera();
+})();

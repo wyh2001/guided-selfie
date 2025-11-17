@@ -72,6 +72,21 @@ export class PhotoCapture {
 	}
 
 	/**
+	 * Take a photo and return the Blob only
+	 * @returns {Promise<{ blob: Blob }>}
+	 */
+	async captureWithBlob() {
+		if (!this.imageCapture) {
+			throw new Error("Camera not initialized");
+		}
+
+		const frame = await this.imageCapture.grabFrame();
+		const blob = await this._bitmapToBlob(frame);
+
+		return { blob };
+	}
+
+	/**
 	 * Download the photo
 	 * @param {string} filename - Filename (optional)
 	 */
