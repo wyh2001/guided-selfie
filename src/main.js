@@ -22,7 +22,7 @@ This will be updated over time when the project evolves.
 import "./style.css";
 import { FaceDetect } from "./services/faceDetect.js";
 import { PhotoCapture } from "./services/photoCapture.js";
-import './webspeech.js';
+import "./webspeech.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
@@ -54,28 +54,6 @@ const downloadBtn = app.querySelector('[data-action="download"]');
 const status = app.querySelector(".status");
 const debug = app.querySelector(".debug");
 const placeholder = app.querySelector(".video-placeholder");
-
-// Expose safe hooks for external integrations (e.g., the web speech module).
-// These are minimal and only reference existing objects.
-window.captureBtn = captureBtn; // optional, already available via selector in webspeech.js fallback
-window.takePhoto = async function () {
-  // Simulate user click to preserve existing behavior & event listeners
-  if (captureBtn) {
-    captureBtn.click();
-    return;
-  }
-  // if not present, try photoService
-  if (window.photoService && typeof window.photoService.capture === 'function') {
-    await window.photoService.capture();
-    return;
-  }
-  console.warn('takePhoto() called but no capture handler found.');
-};
-
-// If photoService variable exists in this module's scope, expose it so webspeech can call it directly.
-if (typeof photoService !== 'undefined') {
-  window.photoService = photoService;
-}
 
 const preview = app.querySelector(".preview");
 
@@ -399,21 +377,25 @@ window.addEventListener("beforeunload", () => {
 
 setupCamera();
 
-// EXAMPLE USAGE OF SPEECH SERVICES
-// Example: Listen to voice commands from the speech module
-document.addEventListener('voice:command', (event) => {
+// Handle voice commands
+document.addEventListener("voice:command", (event) => {
 	const { command } = event.detail;
-	console.log('Received voice command:', command);
-	
-	// Handle voice commands here based on your app's needs
-	// For example:
-	// - 'left', 'right' for positioning guidance
-	// - 'zoom-in', 'zoom-out' for zoom control
-	// - etc.
-});
+	console.log("Received voice command:", command);
 
-// window.speechManager.speak("Move to the left");
-// window.speechManager.enableTTS(true);
-// window.speechManager.startListening();
-// window.speechManager.stopListening();
-// window.speechManager.setLanguage('es-ES');
+	switch (command) {
+		case "take-photo":
+			if (captureBtn && !captureBtn.disabled) {
+				captureBtn.click();
+			}
+			break;
+		case "left":
+		case "right":
+		case "zoom-in":
+		case "zoom-out":
+			// TBD
+			console.log(`Position/zoom guidance: ${command}`);
+			break;
+		default:
+			console.log(`Unhandled voice command: ${command}`);
+	}
+});

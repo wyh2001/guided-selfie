@@ -5,9 +5,7 @@
  */
 import { SpeechManager } from './services/SpeechManager.js';
 
-// Create and expose the global speech manager
 const speechManager = new SpeechManager();
-window.speechManager = speechManager;
 
 // COMMAND HANDLERS
 
@@ -15,18 +13,18 @@ function setupCommands() {
   // Capture/photo commands
   speechManager.registerCommand('take', (transcript) => {
     if (transcript.includes('photo') || transcript.includes('capture') || transcript.includes('snap')) {
-      handleCaptureCommand();
+      dispatchVoiceCommand('take-photo');
       speechManager.speak('Photo captured');
     }
   });
 
   speechManager.registerCommand('capture', () => {
-    handleCaptureCommand();
+    dispatchVoiceCommand('take-photo');
     speechManager.speak('Capturing photo');
   });
 
   speechManager.registerCommand('snap', () => {
-    handleCaptureCommand();
+    dispatchVoiceCommand('take-photo');
     speechManager.speak('Snap');
   });
 
@@ -51,29 +49,6 @@ function setupCommands() {
     dispatchVoiceCommand('zoom-out');
     speechManager.speak('Zooming out');
   });
-}
-
-function handleCaptureCommand() {
-  // Try global takePhoto function first
-  if (typeof window.takePhoto === 'function') {
-    window.takePhoto();
-    return;
-  }
-
-  // Try photoService
-  if (window.photoService && typeof window.photoService.capture === 'function') {
-    window.photoService.capture();
-    return;
-  }
-
-  // Fallback: try to find and click the capture button
-  const captureBtn = document.querySelector('[data-action="capture"]');
-  if (captureBtn) {
-    captureBtn.click();
-    return;
-  }
-
-  console.warn('No capture method available');
 }
 
 function dispatchVoiceCommand(command) {
