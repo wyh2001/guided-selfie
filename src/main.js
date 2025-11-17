@@ -22,9 +22,11 @@ This will be updated over time when the project evolves.
 import "./style.css";
 import { FaceDetect } from "./services/face-detect.js";
 import { PhotoCapture } from "./services/photo-capture.js";
+import { PhotoStore } from "./services/photo-store.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
+const photoStore = new PhotoStore();
 const faceService = new FaceDetect();
 
 app.innerHTML = `
@@ -250,6 +252,19 @@ async function setupCamera() {
 	}
 }
 
+async function loadStoredPhotos() {
+	try {
+		const items = await photoStore.getAllPhotos();
+		items.forEach((item) => {
+			const url = URL.createObjectURL(item.blob);
+			storedPhotos.push([url, item.createdAt]);
+		});
+		refreshAlbumThumbnail();
+	} catch (error) {
+		console.error("Failed to load stored photos:", error);
+	}
+}
+
 function handleDetections(detections) {
 	const videoWidth = video.videoWidth;
 	const videoHeight = video.videoHeight;
@@ -461,9 +476,14 @@ function evaluateFacePosition(detections, videoWidth, videoHeight) {
 captureBtn.addEventListener("click", async () => {
 	try {
 		status.textContent = "Capturing…";
-		const photoURL = await photoService.capture();
-		storedPhotos.push([photoURL, Date.now()]);
-		refreshAlbumThumbnail();
+		const { blob, url } = await photoService.captureWithBlob();
+		try {
+			const { createdAt } = await photoStore.addPhoto(blob);
+			storedPhotos.push([url, createdAt]);
+			refreshAlbumThumbnail();
+		} catch (storageError) {
+			console.error("Failed to persist photo:", storageError);
+		}
 		status.textContent = "Photo saved";
 		setTimeout(() => {
 			status.textContent = "Look at the camera";
@@ -499,6 +519,13 @@ window.addEventListener("beforeunload", () => {
 	photoService.dispose();
 	faceService.dispose();
 	video.srcObject = null;
+	storedPhotos.forEach(([url]) => {
+		URL.revokeObjectURL(url);
+	});
 });
 
-setupCamera();
+(async () => {
+	await loadStoredPhotos();
+	refreshAlbumThumbnail();
+	setupCamera();
+})();
