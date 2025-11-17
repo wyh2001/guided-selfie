@@ -577,6 +577,5 @@ window.addEventListener("beforeunload", () => {
 
 (async () => {
 	await loadStoredPhotos();
-	refreshAlbumThumbnail();
 	setupCamera();
 })();
