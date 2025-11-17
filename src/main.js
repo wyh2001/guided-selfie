@@ -23,6 +23,7 @@ import "./style.css";
 import { FaceDetect } from "./services/face-detect.js";
 import { PhotoCapture } from "./services/photo-capture.js";
 import { PhotoStore } from "./services/photo-store.js";
+import "./webspeech.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
@@ -79,6 +80,7 @@ const captureBtn = app.querySelector('[data-action="capture"]');
 const status = app.querySelector(".status");
 const debug = app.querySelector(".debug");
 const placeholder = app.querySelector(".video-placeholder");
+
 const preview = app.querySelector(".preview");
 const albumBtn = app.querySelector(".album-button");
 const albumView = app.querySelector(".album-view");
@@ -579,3 +581,26 @@ window.addEventListener("beforeunload", () => {
 	await loadStoredPhotos();
 	setupCamera();
 })();
+
+// Handle voice commands
+document.addEventListener("voice:command", (event) => {
+	const { command } = event.detail;
+	console.log("Received voice command:", command);
+
+	switch (command) {
+		case "take-photo":
+			if (captureBtn && !captureBtn.disabled) {
+				captureBtn.click();
+			}
+			break;
+		case "left":
+		case "right":
+		case "zoom-in":
+		case "zoom-out":
+			// TBD
+			console.log(`Position/zoom guidance: ${command}`);
+			break;
+		default:
+			console.log(`Unhandled voice command: ${command}`);
+	}
+});
