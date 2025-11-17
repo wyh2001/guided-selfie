@@ -72,8 +72,8 @@ export class PhotoCapture {
 	}
 
 	/**
-	 * Take a photo and return both Blob and URL
-	 * @returns {Promise<{ blob: Blob, url: string }>}
+	 * Take a photo and return the Blob only
+	 * @returns {Promise<{ blob: Blob }>}
 	 */
 	async captureWithBlob() {
 		if (!this.imageCapture) {
@@ -83,9 +83,7 @@ export class PhotoCapture {
 		const frame = await this.imageCapture.grabFrame();
 		const blob = await this._bitmapToBlob(frame);
 
-		this.clearPhoto();
-		this.currentPhotoURL = URL.createObjectURL(blob);
-		return { blob, url: this.currentPhotoURL };
+		return { blob };
 	}
 
 	/**
