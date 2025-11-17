@@ -91,6 +91,10 @@ const backBtn = app.querySelector('[data-action="back-to-camera"]');
 const deleteBtn = app.querySelector('[data-action="delete-photo"]');
 const captureView = app.querySelector(".capture");
 
+albumPhoto.addEventListener("error", () => {
+	console.warn("Failed to load image:", albumPhoto.src);
+});
+
 const faceBoxElements = [];
 /**
  * Array of stored photos. Each entry is a tuple of [photoURL: string, timestamp: number]
@@ -258,6 +262,8 @@ async function setupCamera() {
 async function loadStoredPhotos() {
 	try {
 		const items = await photoStore.getAllPhotos();
+		// Ensure stable order regardless of backend/index implementation
+		items.sort((a, b) => a.createdAt - b.createdAt);
 		items.forEach((item) => {
 			const url = URL.createObjectURL(item.blob);
 			storedPhotos.push([url, item.createdAt]);
@@ -480,7 +486,8 @@ function evaluateFacePosition(detections, videoWidth, videoHeight) {
 captureBtn.addEventListener("click", async () => {
 	try {
 		status.textContent = "Capturing…";
-		const { blob, url } = await photoService.captureWithBlob();
+		const { blob } = await photoService.captureWithBlob();
+		const url = URL.createObjectURL(blob);
 		try {
 			const { id, createdAt } = await photoStore.addPhoto(blob);
 			storedPhotos.push([url, createdAt]);
@@ -488,6 +495,9 @@ captureBtn.addEventListener("click", async () => {
 			refreshAlbumThumbnail();
 		} catch (storageError) {
 			console.error("Failed to persist photo:", storageError);
+			try {
+				URL.revokeObjectURL(url);
+			} catch (_) {}
 		}
 		status.textContent = "Photo saved";
 		setTimeout(() => {
