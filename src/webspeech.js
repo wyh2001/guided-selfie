@@ -1,176 +1,213 @@
-// src/webspeech.js
-// Web Speech API integration for guided-selfie
-// Listens for simple voice commands (take photo, capture, snap, start, stop, help, zoom in/out, left/right).
+/**
+ * Web Speech Integration
+ * This file sets up the speech services and UI.
+ * The actual speech logic is in separate service files.
+ */
+import { SpeechManager } from './services/SpeechManager.js';
 
-(function () {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-  const root = document.body || document.documentElement;
+// Create and expose the global speech manager
+const speechManager = new SpeechManager();
+window.speechManager = speechManager;
 
-  // Create a small voice control UI element and append it near the end of body.
+// COMMAND HANDLERS
+
+function setupCommands() {
+  // Capture/photo commands
+  speechManager.registerCommand('take', (transcript) => {
+    if (transcript.includes('photo') || transcript.includes('capture') || transcript.includes('snap')) {
+      handleCaptureCommand();
+      speechManager.speak('Photo captured');
+    }
+  });
+
+  speechManager.registerCommand('capture', () => {
+    handleCaptureCommand();
+    speechManager.speak('Capturing photo');
+  });
+
+  speechManager.registerCommand('snap', () => {
+    handleCaptureCommand();
+    speechManager.speak('Snap');
+  });
+
+  // Movement commands
+  speechManager.registerCommand('left', () => {
+    dispatchVoiceCommand('left');
+    speechManager.speak('Moving left');
+  });
+
+  speechManager.registerCommand('right', () => {
+    dispatchVoiceCommand('right');
+    speechManager.speak('Moving right');
+  });
+
+  // Zoom commands
+  speechManager.registerCommand('zoom in', () => {
+    dispatchVoiceCommand('zoom-in');
+    speechManager.speak('Zooming in');
+  });
+
+  speechManager.registerCommand('zoom out', () => {
+    dispatchVoiceCommand('zoom-out');
+    speechManager.speak('Zooming out');
+  });
+}
+
+function handleCaptureCommand() {
+  // Try global takePhoto function first
+  if (typeof window.takePhoto === 'function') {
+    window.takePhoto();
+    return;
+  }
+
+  // Try photoService
+  if (window.photoService && typeof window.photoService.capture === 'function') {
+    window.photoService.capture();
+    return;
+  }
+
+  // Fallback: try to find and click the capture button
+  const captureBtn = document.querySelector('[data-action="capture"]');
+  if (captureBtn) {
+    captureBtn.click();
+    return;
+  }
+
+  console.warn('No capture method available');
+}
+
+function dispatchVoiceCommand(command) {
+  // Dispatch custom event that other parts of the app can listen to
+  document.dispatchEvent(new CustomEvent('voice:command', {
+    detail: { command }
+  }));
+
+  console.log('Voice command dispatched:', command);
+}
+
+// UI SETUP
+
+function setupUI() {
+  // Create the voice control UI container
   const container = document.createElement('div');
   container.id = 'voice-control-container';
-  container.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:9999;background:rgba(0,0,0,0.6);color:white;padding:8px 10px;border-radius:8px;font-family:Arial,Helvetica,sans-serif;font-size:13px;display:flex;align-items:center;gap:8px';
+  container.style.cssText = `
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  `;
+
   container.innerHTML = `
     <button id="voiceMicBtn" aria-pressed="false" title="Start/stop voice control" style="background:transparent;border:1px solid rgba(255,255,255,0.2);color:white;padding:6px 8px;border-radius:6px;cursor:pointer;">🎤</button>
     <span id="voiceStatus" aria-live="polite" style="min-width:120px">Voice: off</span>
     <select id="voiceLang" title="Recognition language" style="background:transparent;border:1px solid rgba(255,255,255,0.12);color:white;padding:4px;border-radius:6px;">
-      <option value="en-US" selected>en-US</option>
-      <option value="en-GB">en-GB</option>
-      <option value="es-ES">es-ES</option>
-      <option value="fr-FR">fr-FR</option>
+      <option value="en-US" selected>English (US)</option>
+      <option value="en-GB">English (UK)</option>
+      <option value="es-ES">Spanish</option>
+      <option value="fr-FR">French</option>
+      <option value="de-DE">German</option>
+      <option value="it-IT">Italian</option>
+      <option value="ja-JP">Japanese</option>
+      <option value="zh-CN">Chinese</option>
     </select>
     <label style="display:flex;align-items:center;gap:6px;">
-      <input id="ttsToggle" type="checkbox" style="cursor:pointer"> <span style="font-size:12px;margin-left:4px">TTS</span>
+      <input id="ttsToggle" type="checkbox" style="cursor:pointer">
+      <span style="font-size:12px">TTS</span>
     </label>
   `;
-  root.appendChild(container);
 
+  document.body.appendChild(container);
+
+  // Get UI elements
   const micBtn = document.getElementById('voiceMicBtn');
-  const statusEl = document.getElementById('voiceStatus');
-  const langEl = document.getElementById('voiceLang');
-  const ttsEl = document.getElementById('ttsToggle');
+  const voiceStatus = document.getElementById('voiceStatus');
+  const voiceLang = document.getElementById('voiceLang');
+  const ttsToggle = document.getElementById('ttsToggle');
 
-  function setStatus(txt) {
-    statusEl.textContent = `Voice: ${txt}`;
-  }
-  function speakIfEnabled(text) {
-    if (!ttsEl || !ttsEl.checked) return;
-    if (!('speechSynthesis' in window)) return;
-    try {
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1;
-      u.pitch = 1;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    } catch (e) {
-      // ignore
-    }
-  }
+  // UI EVENT HANDLERS
 
-  if (!SpeechRecognition) {
-    setStatus('unsupported');
-    console.warn('SpeechRecognition unsupported in this browser.');
-    return;
-  }
-
-  const recognition = new SpeechRecognition();
-  recognition.interimResults = false;
-  recognition.maxAlternatives = 1;
-  recognition.continuous = false; // restart manually if needed
-  recognition.lang = (langEl && langEl.value) || 'en-US';
-
-  let listening = false;
-
-  // Map simple transcripts to handlers
-  const exactHandlers = {
-    'take photo': () => doCapture('take photo'),
-    'take a photo': () => doCapture('take photo'),
-    'capture': () => doCapture('capture'),
-    'snap': () => doCapture('snap'),
-    'start': () => { startListening(); speakIfEnabled('Voice control started'); },
-    'stop': () => { stopListening(); speakIfEnabled('Voice control stopped'); },
-    'help': () => speakIfEnabled('Say: take photo, capture, snap, start, stop, zoom in, zoom out, left or right.'),
-  };
-
-  recognition.onresult = (ev) => {
-    const t = (ev.results[0][0].transcript || '').trim().toLowerCase();
-    console.log('[voice] transcript:', t);
-    setStatus('heard: ' + t);
-    // direct match
-    if (exactHandlers[t]) {
-      exactHandlers[t]();
-      return;
-    }
-    // fuzzy matching
-    if (t.includes('photo') || t.includes('take') || t.includes('capture') || t.includes('snap')) {
-      doCapture(t);
-      return;
-    }
-    if (t.includes('left') || t.includes('right')) {
-      if (t.includes('left')) dispatchVoiceCommand('left');
-      if (t.includes('right')) dispatchVoiceCommand('right');
-      return;
-    }
-    if (t.includes('zoom')) {
-      if (t.includes('in')) dispatchVoiceCommand('zoom in');
-      else if (t.includes('out')) dispatchVoiceCommand('zoom out');
-      return;
-    }
-    speakIfEnabled('Sorry, I did not understand. Say help for available commands.');
-  };
-
-  recognition.onerror = (ev) => {
-    console.warn('[voice] error', ev);
-    setStatus('error: ' + (ev && ev.error ? ev.error : 'unknown'));
-    // keep the mic button state consistent
-    listening = false;
-    micBtn.setAttribute('aria-pressed', 'false');
-  };
-
-  recognition.onend = () => {
-    // ended - update UI
-    listening = false;
-    micBtn.setAttribute('aria-pressed', 'false');
-    setStatus('off');
-  };
-
-  function startListening() {
-    if (listening) return;
-    try {
-      recognition.lang = (langEl && langEl.value) || 'en-US';
-      recognition.start();
-      listening = true;
-      micBtn.setAttribute('aria-pressed', 'true');
-      setStatus('listening...');
-    } catch (e) {
-      console.warn('SpeechRecognition start error', e);
-      setStatus('error');
-    }
-  }
-
-  function stopListening() {
-    if (!listening) return;
-    recognition.stop();
-    listening = false;
-    micBtn.setAttribute('aria-pressed', 'false');
-    setStatus('off');
-  }
-
+  // Microphone button - toggle listening
   micBtn.addEventListener('click', () => {
-    if (listening) {
-      stopListening();
-    } else {
-      startListening();
-    }
+    speechManager.toggleListening();
   });
 
-  langEl.addEventListener('change', () => {
-    recognition.lang = langEl.value;
-    speakIfEnabled('Language set to ' + langEl.options[langEl.selectedIndex].text);
+  // Language selector
+  voiceLang.addEventListener('change', (e) => {
+    speechManager.setLanguage(e.target.value);
   });
 
-  // Placeholder implementations for external actions - you can replace these
-  function doCapture(command) {
-    console.log('[voice] doCapture called with command:', command);
-    speakIfEnabled('Taking photo');
-    // Try triggering app capture button or window functions
-    const btn = document.querySelector('[data-action="capture"]');
-    if (btn) {
-      btn.click();
-    } else if (window.takePhoto) {
-      window.takePhoto();
-    } else if (window.photoService && typeof window.photoService.capture === 'function') {
-      window.photoService.capture();
-    } else {
-      console.warn('No capture method found.');
-    }
+  // TTS toggle
+  ttsToggle.addEventListener('change', (e) => {
+    speechManager.enableTTS(e.target.checked);
+  });
+
+  // Update UI when recognition starts
+  speechManager.onRecognitionStart(() => {
+    voiceStatus.textContent = 'Voice: listening...';
+    micBtn.setAttribute('aria-pressed', 'true');
+    micBtn.style.background = 'rgba(255, 0, 0, 0.3)';
+    micBtn.style.borderColor = 'rgba(255, 100, 100, 0.6)';
+  });
+
+  // Update UI when recognition ends
+  speechManager.onRecognitionEnd(() => {
+    voiceStatus.textContent = 'Voice: off';
+    micBtn.setAttribute('aria-pressed', 'false');
+    micBtn.style.background = 'transparent';
+    micBtn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+  });
+
+  // Update UI when recognition errors occur
+  speechManager.onRecognitionError((error) => {
+    voiceStatus.textContent = `Voice: error (${error})`;
+    console.error('Recognition error:', error);
+  });
+
+  // Update UI when TTS state changes
+  speechManager.onTTSEnabledChange((enabled) => {
+    ttsToggle.checked = enabled;
+  });
+}
+
+// INITIALIZATION
+
+function init() {
+  // Check if speech features are supported
+  const support = speechManager.isSupported();
+  
+  if (!support.recognition) {
+    console.warn('Speech Recognition is not supported in this browser');
+  }
+  
+  if (!support.tts) {
+    console.warn('Text-to-Speech is not supported in this browser');
   }
 
-  function dispatchVoiceCommand(cmd) {
-    console.log('[voice] dispatchVoiceCommand:', cmd);
-    speakIfEnabled(`Command ${cmd} executed`);
-    // Implement actual logic to handle commands like zoom or left/right movement here
-    // For example, dispatch custom events, call other functions, etc.
-  }
+  // Set up command handlers
+  setupCommands();
 
-})();
+  // Set up UI
+  setupUI();
+
+  console.log('Speech services initialized');
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+// Export for module usage
+export { speechManager };

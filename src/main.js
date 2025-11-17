@@ -22,6 +22,7 @@ This will be updated over time when the project evolves.
 import "./style.css";
 import { FaceDetect } from "./services/faceDetect.js";
 import { PhotoCapture } from "./services/photoCapture.js";
+import './webspeech.js';
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
@@ -70,6 +71,11 @@ window.takePhoto = async function () {
   }
   console.warn('takePhoto() called but no capture handler found.');
 };
+
+// If photoService variable exists in this module's scope, expose it so webspeech can call it directly.
+if (typeof photoService !== 'undefined') {
+  window.photoService = photoService;
+}
 
 const preview = app.querySelector(".preview");
 
@@ -393,12 +399,21 @@ window.addEventListener("beforeunload", () => {
 
 setupCamera();
 
-// If photoService variable exists in this module's scope, expose it so webspeech can call it directly.
-if (typeof photoService !== 'undefined') {
-  window.photoService = photoService;
-}
+// EXAMPLE USAGE OF SPEECH SERVICES
+// Example: Listen to voice commands from the speech module
+document.addEventListener('voice:command', (event) => {
+	const { command } = event.detail;
+	console.log('Received voice command:', command);
+	
+	// Handle voice commands here based on your app's needs
+	// For example:
+	// - 'left', 'right' for positioning guidance
+	// - 'zoom-in', 'zoom-out' for zoom control
+	// - etc.
+});
 
-// Import the voice module (no need to modify index.html)
-// This ensures the voice UI is available and can bind to existing DOM.
-import('./webspeech.js').catch((e) => console.warn('Failed to load webspeech module', e));
-
+// window.speechManager.speak("Move to the left");
+// window.speechManager.enableTTS(true);
+// window.speechManager.startListening();
+// window.speechManager.stopListening();
+// window.speechManager.setLanguage('es-ES');
