@@ -43,8 +43,8 @@ app.innerHTML = `
   </main>
   <section class="album-view" hidden>
     <header class="album-header">
-      <button type="button" data-action="back-to-camera" aria-label="Back to camera">← Back</button>
-      <button type="button" data-action="delete-photo" aria-label="Delete current photo">Delete</button>
+      <button type="button" data-action="back-to-camera" aria-label="Back to camera">Back</button>
+      <button type="button" class="album-delete-btn" data-action="delete-photo" aria-label="Delete current photo">Delete</button>
     </header>
     <div class="album-viewer">
       <div class="album-placeholder" role="status" hidden>

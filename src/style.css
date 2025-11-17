@@ -199,6 +199,12 @@ button:disabled {
 	z-index: 12;
 }
 
+.album-delete-btn {
+	position: absolute;
+	top: 16px;
+	right: 16px;
+}
+
 .album-viewer {
 	position: relative;
 	display: flex;
