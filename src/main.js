@@ -44,6 +44,7 @@ app.innerHTML = `
   <section class="album-view" hidden>
     <header class="album-header">
       <button type="button" data-action="back-to-camera" aria-label="Back to camera">← Back</button>
+      <button type="button" data-action="delete-photo" aria-label="Delete current photo">Delete</button>
     </header>
     <div class="album-viewer">
       <div class="album-placeholder" role="status" hidden>
@@ -87,6 +88,7 @@ const albumPlaceholder = app.querySelector(".album-placeholder");
 const prevBtn = app.querySelector('[data-action="prev-photo"]');
 const nextBtn = app.querySelector('[data-action="next-photo"]');
 const backBtn = app.querySelector('[data-action="back-to-camera"]');
+const deleteBtn = app.querySelector('[data-action="delete-photo"]');
 const captureView = app.querySelector(".capture");
 
 const faceBoxElements = [];
@@ -95,6 +97,7 @@ const faceBoxElements = [];
  * @type {Array<[string, number]>}
  */
 const storedPhotos = [];
+const urlToId = new Map(); // Map from blob URL to id for deletion
 let currentPhotoIndex = 0;
 
 const defaultPlaceholderText = placeholder.textContent;
@@ -258,6 +261,7 @@ async function loadStoredPhotos() {
 		items.forEach((item) => {
 			const url = URL.createObjectURL(item.blob);
 			storedPhotos.push([url, item.createdAt]);
+			urlToId.set(url, item.id);
 		});
 		refreshAlbumThumbnail();
 	} catch (error) {
@@ -478,8 +482,9 @@ captureBtn.addEventListener("click", async () => {
 		status.textContent = "Capturing…";
 		const { blob, url } = await photoService.captureWithBlob();
 		try {
-			const { createdAt } = await photoStore.addPhoto(blob);
+			const { id, createdAt } = await photoStore.addPhoto(blob);
 			storedPhotos.push([url, createdAt]);
+			urlToId.set(url, id);
 			refreshAlbumThumbnail();
 		} catch (storageError) {
 			console.error("Failed to persist photo:", storageError);
@@ -513,6 +518,39 @@ nextBtn.addEventListener("click", () => {
 		currentPhotoIndex++;
 		updateAlbumPhoto();
 	}
+});
+
+deleteBtn.addEventListener("click", async () => {
+	if (storedPhotos.length === 0) {
+		return;
+	}
+	const actualIndex = storedPhotos.length - 1 - currentPhotoIndex;
+	const [url] = storedPhotos[actualIndex];
+	const id = urlToId.get(url);
+	try {
+		if (id !== undefined) {
+			await photoStore.deletePhoto(id);
+		}
+	} catch (err) {
+		console.error("Failed to delete photo from storage:", err);
+	}
+	try {
+		URL.revokeObjectURL(url);
+	} catch (_) {}
+	storedPhotos.splice(actualIndex, 1);
+	urlToId.delete(url);
+
+	if (storedPhotos.length === 0) {
+		currentPhotoIndex = 0;
+		setState(State.ALBUM_EMPTY);
+		refreshAlbumThumbnail();
+		return;
+	}
+	if (currentPhotoIndex > storedPhotos.length - 1) {
+		currentPhotoIndex = storedPhotos.length - 1;
+	}
+	refreshAlbumThumbnail();
+	setState(State.ALBUM_NOT_EMPTY);
 });
 
 window.addEventListener("beforeunload", () => {

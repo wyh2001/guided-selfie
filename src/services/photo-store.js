@@ -71,6 +71,24 @@ export class PhotoStore {
 	}
 
 	/**
+	 * Delete a photo by id.
+	 * @param {number} id
+	 * @returns {Promise<void>}
+	 */
+	async deletePhoto(id) {
+		const db = await this.init();
+		return new Promise((resolve, reject) => {
+			const tx = db.transaction(STORE_NAME, "readwrite");
+			const store = tx.objectStore(STORE_NAME);
+			const request = store.delete(id);
+			request.onsuccess = () => resolve();
+			request.onerror = () => {
+				reject(request.error || new Error("Failed to delete photo"));
+			};
+		});
+	}
+
+	/**
 	 * Get all photos ordered by createdAt ascending.
 	 * @returns {Promise<Array<{id: number, blob: Blob, createdAt: number}>>}
 	 */
