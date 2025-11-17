@@ -97,11 +97,10 @@ albumPhoto.addEventListener("error", () => {
 
 const faceBoxElements = [];
 /**
- * Array of stored photos. Each entry is a tuple of [photoURL: string, timestamp: number]
- * @type {Array<[string, number]>}
+ * Array of stored photos. Each entry is an object { id: number, url: string, createdAt: number }
+ * @type {Array<{id: number, url: string, createdAt: number}>}
  */
 const storedPhotos = [];
-const urlToId = new Map(); // Map from blob URL to id for deletion
 let currentPhotoIndex = 0;
 
 const defaultPlaceholderText = placeholder.textContent;
@@ -266,8 +265,7 @@ async function loadStoredPhotos() {
 		items.sort((a, b) => a.createdAt - b.createdAt);
 		items.forEach((item) => {
 			const url = URL.createObjectURL(item.blob);
-			storedPhotos.push([url, item.createdAt]);
-			urlToId.set(url, item.id);
+			storedPhotos.push({ id: item.id, url, createdAt: item.createdAt });
 		});
 		refreshAlbumThumbnail();
 	} catch (error) {
@@ -378,7 +376,7 @@ function refreshAlbumThumbnail() {
 		albumBtn.style.backgroundImage = "none";
 		return;
 	}
-	const latestPhotoURL = storedPhotos[storedPhotos.length - 1][0];
+	const latestPhotoURL = storedPhotos[storedPhotos.length - 1].url;
 	albumBtn.style.backgroundImage = `url(${latestPhotoURL})`;
 }
 
@@ -406,9 +404,9 @@ function updateAlbumPhoto() {
 		currentPhotoIndex = storedPhotos.length - 1;
 
 	const actualIndex = storedPhotos.length - 1 - currentPhotoIndex;
-	const [url, timestamp] = storedPhotos[actualIndex];
+	const { url, createdAt } = storedPhotos[actualIndex];
 	albumPhoto.src = url;
-	albumPhoto.alt = `Photo ${currentPhotoIndex + 1} taken at ${new Date(timestamp).toLocaleString()}`;
+	albumPhoto.alt = `Photo ${currentPhotoIndex + 1} taken at ${new Date(createdAt).toLocaleString()}`;
 	albumCounter.textContent = `${currentPhotoIndex + 1} / ${storedPhotos.length}`;
 	prevBtn.disabled = currentPhotoIndex === 0;
 	nextBtn.disabled = currentPhotoIndex === storedPhotos.length - 1;
@@ -490,8 +488,7 @@ captureBtn.addEventListener("click", async () => {
 		const url = URL.createObjectURL(blob);
 		try {
 			const { id, createdAt } = await photoStore.addPhoto(blob);
-			storedPhotos.push([url, createdAt]);
-			urlToId.set(url, id);
+			storedPhotos.push({ id, url, createdAt });
 			refreshAlbumThumbnail();
 		} catch (storageError) {
 			console.error("Failed to persist photo:", storageError);
@@ -543,8 +540,7 @@ deleteBtn.addEventListener("click", async () => {
 	}
 
 	const actualIndex = storedPhotos.length - 1 - currentPhotoIndex;
-	const [url] = storedPhotos[actualIndex];
-	const id = urlToId.get(url);
+	const { id, url } = storedPhotos[actualIndex];
 	try {
 		if (id !== undefined) {
 			await photoStore.deletePhoto(id);
@@ -556,7 +552,6 @@ deleteBtn.addEventListener("click", async () => {
 		URL.revokeObjectURL(url);
 	} catch (_) {}
 	storedPhotos.splice(actualIndex, 1);
-	urlToId.delete(url);
 
 	if (storedPhotos.length === 0) {
 		currentPhotoIndex = 0;
@@ -575,7 +570,7 @@ window.addEventListener("beforeunload", () => {
 	photoService.dispose();
 	faceService.dispose();
 	video.srcObject = null;
-	storedPhotos.forEach(([url]) => {
+	storedPhotos.forEach(({ url }) => {
 		URL.revokeObjectURL(url);
 	});
 });
