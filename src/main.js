@@ -524,6 +524,14 @@ deleteBtn.addEventListener("click", async () => {
 	if (storedPhotos.length === 0) {
 		return;
 	}
+
+	const confirmDelete = confirm(
+		"Delete this photo permanently? This action cannot be undone.",
+	);
+	if (!confirmDelete) {
+		return;
+	}
+
 	const actualIndex = storedPhotos.length - 1 - currentPhotoIndex;
 	const [url] = storedPhotos[actualIndex];
 	const id = urlToId.get(url);
