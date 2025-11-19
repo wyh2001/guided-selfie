@@ -27,6 +27,10 @@ export function setupSpeechControlUI(manager) {
 	const micBtn = document.getElementById("voiceMicBtn");
 	const ttsToggle = document.getElementById("ttsToggle");
 
+	// Sound effects
+	const startSound = new Audio("/sounds/ding_start.mp3");
+	const stopSound = new Audio("/sounds/ding_stop.mp3");
+
 	// UI EVENT HANDLERS
 
 	// Microphone button - toggle listening
@@ -42,11 +46,13 @@ export function setupSpeechControlUI(manager) {
 	// Update UI when recognition starts
 	manager.onRecognitionStart(() => {
 		updateVoiceButton(true);
+		startSound.play().catch(() => {});
 	});
 
 	// Update UI when recognition ends
 	manager.onRecognitionEnd(() => {
 		updateVoiceButton(false);
+		stopSound.play().catch(() => {});
 	});
 
 	// Update UI when TTS state changes
