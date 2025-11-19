@@ -73,7 +73,7 @@ export class SelfieSegmentation {
 	 * @param {HTMLCanvasElement} canvas
 	 * @param {number} interval - Update interval in seconds
 	 */
-	start(video, canvas, interval = 0.15) {
+	start(video, canvas, interval = 0.1) {
 		if (!this.segmenter) {
 			console.error("Segmenter not initialized");
 			return;
@@ -83,7 +83,12 @@ export class SelfieSegmentation {
 		this.ctx = this.canvas.getContext("2d");
 		this.interval = interval;
 		this.isRunning = true;
-		this.loop();
+
+		if (this.video.requestVideoFrameCallback) {
+			this.rafId = this.video.requestVideoFrameCallback(this.loop.bind(this));
+		} else {
+			this.loop();
+		}
 	}
 
 	/**
@@ -92,7 +97,11 @@ export class SelfieSegmentation {
 	stop() {
 		this.isRunning = false;
 		if (this.rafId) {
-			cancelAnimationFrame(this.rafId);
+			if (this.video?.cancelVideoFrameCallback) {
+				this.video.cancelVideoFrameCallback(this.rafId);
+			} else {
+				cancelAnimationFrame(this.rafId);
+			}
 			this.rafId = null;
 		}
 		// Clear canvas
@@ -138,7 +147,11 @@ export class SelfieSegmentation {
 			}
 		}
 
-		this.rafId = requestAnimationFrame(() => this.loop());
+		if (this.video.requestVideoFrameCallback) {
+			this.rafId = this.video.requestVideoFrameCallback(this.loop.bind(this));
+		} else {
+			this.rafId = requestAnimationFrame(() => this.loop());
+		}
 	}
 
 	/**
