@@ -533,15 +533,15 @@ function guideUser(evals) {
 	}
 	// Priority 2: Vertical
 	else if (positions.includes(facePosition.TOP)) {
-		message = "Move phone up";
+		message = "Point phone up";
 	} else if (positions.includes(facePosition.BOTTOM)) {
-		message = "Move phone down";
+		message = "Point phone down";
 	}
 	// Priority 3: Horizontal
 	else if (positions.includes(facePosition.LEFT)) {
-		message = "Move phone left";
+		message = "Turn phone left";
 	} else if (positions.includes(facePosition.RIGHT)) {
-		message = "Move phone right";
+		message = "Turn phone right";
 	}
 
 	if (message) {
