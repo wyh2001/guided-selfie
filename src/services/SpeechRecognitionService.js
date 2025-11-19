@@ -29,7 +29,7 @@ export class SpeechRecognitionService {
     this.recognition = new SpeechRecognition();
     this.recognition.interimResults = false;
     this.recognition.maxAlternatives = 1;
-    this.recognition.continuous = false;
+    this.recognition.continuous = true;
     this.recognition.lang = this.language;
     
     this.setupHandlers();
@@ -39,9 +39,12 @@ export class SpeechRecognitionService {
     if (!this.recognition) return;
 
     this.recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript.toLowerCase().trim();
-      if (this.onResult) {
-        this.onResult(transcript);
+      // Handle continuous mode
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript.toLowerCase().trim();
+        if (this.onResult) {
+          this.onResult(transcript);
+        }
       }
     };
 
