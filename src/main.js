@@ -44,7 +44,7 @@ app.innerHTML = `
     <section class="preview">
       <div class="video-placeholder">Awaiting camera…</div>
       <video autoplay playsinline hidden></video>
-      <canvas id="segmentation-canvas" hidden></canvas>
+      <canvas id="segmentation-canvas" hidden aria-label="High contrast video preview"></canvas>
       <img alt="snapshot" hidden />
     </section>
     <section class="actions">
