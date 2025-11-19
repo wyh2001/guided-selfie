@@ -34,7 +34,7 @@ const faceService = new FaceDetect();
 
 // Initialize speech services
 const speechManager = new SpeechManager();
-speechManager.enableTTS(false);
+speechManager.enableTTS(true);
 registerDefaultVoiceCommands(speechManager);
 
 app.innerHTML = `
@@ -294,6 +294,7 @@ function handleDetections(detections) {
 	evals.forEach((evaluation, index) => {
 		debug.textContent += `Face ${index + 1}: position: ${evaluation.positions.join("-")}, distance: ${evaluation.distance}\n`;
 	});
+	guideUser(evals);
 }
 
 // https://ai.google.dev/edge/api/mediapipe/js/tasks-vision.boundingbox
@@ -491,6 +492,63 @@ function evaluateFacePosition(detections, videoWidth, videoHeight) {
 		evals.push({ positions, distance });
 	});
 	return evals;
+}
+
+let lastGuidanceTime = 0;
+let lastGuidanceState = null;
+const GUIDANCE_INTERVAL = 4000;
+
+function guideUser(evals) {
+	if (evals.length === 0) return;
+
+	const evaluation = evals[0];
+	const positions = evaluation.positions;
+	const distance = evaluation.distance;
+
+	// Check if centered and proper distance
+	if (
+		positions.includes(facePosition.CENTERED) &&
+		distance === faceDistance.NORMAL
+	) {
+		if (lastGuidanceState !== "centered") {
+			speechManager.speak("Perfect. Ready to take a photo.");
+			lastGuidanceState = "centered";
+			lastGuidanceTime = Date.now();
+		}
+		return;
+	}
+
+	const now = Date.now();
+	if (now - lastGuidanceTime < GUIDANCE_INTERVAL) {
+		return;
+	}
+
+	let message = "";
+
+	// Priority 1: Distance
+	if (distance === faceDistance.CLOSE) {
+		message = "Move phone away";
+	} else if (distance === faceDistance.FAR) {
+		message = "Move phone closer";
+	}
+	// Priority 2: Vertical
+	else if (positions.includes(facePosition.TOP)) {
+		message = "Move phone up";
+	} else if (positions.includes(facePosition.BOTTOM)) {
+		message = "Move phone down";
+	}
+	// Priority 3: Horizontal
+	else if (positions.includes(facePosition.LEFT)) {
+		message = "Move phone left";
+	} else if (positions.includes(facePosition.RIGHT)) {
+		message = "Move phone right";
+	}
+
+	if (message) {
+		speechManager.speak(message);
+		lastGuidanceState = "guiding";
+		lastGuidanceTime = now;
+	}
 }
 
 captureBtn.addEventListener("click", async () => {
