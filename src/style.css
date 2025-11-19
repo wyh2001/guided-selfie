@@ -276,11 +276,13 @@ button:disabled {
 .speech-control-bar {
 	position: fixed;
 	top: 16px;
-	left: 50%;
-	transform: translateX(-50%);
+	left: 0;
+	width: 100%;
 	z-index: 10;
 	display: flex;
 	gap: 8px;
+	justify-content: center;
+	flex-wrap: wrap;
 }
 
 .speech-control-bar[hidden] {
@@ -290,13 +292,13 @@ button:disabled {
 .speech-control-btn {
 	background: #fff;
 	color: #000;
-	padding: 10px 16px;
+	padding: 8px 12px;
 	border-radius: 18px;
 	font-weight: bold;
 	width: auto;
-	min-width: 150px;
+	min-width: auto;
 	border: none;
-	font-size: 16px;
+	font-size: 14px;
 	display: inline-flex;
 	justify-content: center;
 	align-items: center;
