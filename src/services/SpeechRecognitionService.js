@@ -39,9 +39,12 @@ export class SpeechRecognitionService {
     if (!this.recognition) return;
 
     this.recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript.toLowerCase().trim();
-      if (this.onResult) {
-        this.onResult(transcript);
+      // Handle continuous mode
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript.toLowerCase().trim();
+        if (this.onResult) {
+          this.onResult(transcript);
+        }
       }
     };
 
