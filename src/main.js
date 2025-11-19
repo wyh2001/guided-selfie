@@ -25,7 +25,7 @@ import { PhotoCapture } from "./services/photo-capture.js";
 import { PhotoStore } from "./services/photo-store.js";
 import { SpeechManager } from "./services/SpeechManager.js";
 import { registerDefaultVoiceCommands } from "./services/speech-commands.js";
-import { setupSpeechDebugUI } from "./services/speech-debug-ui.js";
+import { setupSpeechControlUI } from "./services/speech-control-ui.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
@@ -36,7 +36,6 @@ const faceService = new FaceDetect();
 const speechManager = new SpeechManager();
 speechManager.enableTTS(false);
 registerDefaultVoiceCommands(speechManager);
-setupSpeechDebugUI(speechManager);
 
 app.innerHTML = `
   <main class="capture">
@@ -100,6 +99,8 @@ const nextBtn = app.querySelector('[data-action="next-photo"]');
 const backBtn = app.querySelector('[data-action="back-to-camera"]');
 const deleteBtn = app.querySelector('[data-action="delete-photo"]');
 const captureView = app.querySelector(".capture");
+
+const speechControlBar = setupSpeechControlUI(speechManager);
 
 albumPhoto.addEventListener("error", () => {
 	console.warn("Failed to load image:", albumPhoto.src);
@@ -242,6 +243,7 @@ const setState = (state, overrideMessage) => {
 	captureBtn.disabled = !view.capture;
 	setVisible(captureBtn, !view.albumView);
 	setVisible(albumBtn, !view.albumView);
+	setVisible(speechControlBar, !view.albumView);
 
 	placeholder.textContent = view.placeholderText;
 	status.textContent = overrideMessage ?? view.message;

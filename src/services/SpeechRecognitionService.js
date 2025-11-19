@@ -29,7 +29,7 @@ export class SpeechRecognitionService {
     this.recognition = new SpeechRecognition();
     this.recognition.interimResults = false;
     this.recognition.maxAlternatives = 1;
-    this.recognition.continuous = false;
+    this.recognition.continuous = true;
     this.recognition.lang = this.language;
     
     this.setupHandlers();
