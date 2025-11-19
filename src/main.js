@@ -288,13 +288,21 @@ async function loadStoredPhotos() {
 function handleDetections(detections) {
 	const videoWidth = video.videoWidth;
 	const videoHeight = video.videoHeight;
+
+	// Sort detections by size (area) descending so the largest face is first
+	detections.sort((a, b) => {
+		const areaA = a.boundingBox.width * a.boundingBox.height;
+		const areaB = b.boundingBox.width * b.boundingBox.height;
+		return areaB - areaA;
+	});
+
 	debug.textContent = generateDebugInfo(detections, videoWidth, videoHeight);
 	drawFaceBoxes(detections, videoWidth, videoHeight);
 	const evals = evaluateFacePosition(detections, videoWidth, videoHeight);
 	evals.forEach((evaluation, index) => {
 		debug.textContent += `Face ${index + 1}: position: ${evaluation.positions.join("-")}, distance: ${evaluation.distance}\n`;
 	});
-	guideUser(evals);
+	guideUser(evals, detections.length);
 }
 
 // https://ai.google.dev/edge/api/mediapipe/js/tasks-vision.boundingbox
@@ -498,8 +506,10 @@ let lastGuidanceTime = 0;
 let lastGuidanceState = null;
 const GUIDANCE_INTERVAL = 4000;
 
-function guideUser(evals) {
-	if (evals.length === 0) return;
+function guideUser(evals, faceCount) {
+	if (evals.length === 0) {
+		return;
+	}
 
 	const evaluation = evals[0];
 	const positions = evaluation.positions;
@@ -511,7 +521,11 @@ function guideUser(evals) {
 		distance === faceDistance.NORMAL
 	) {
 		if (lastGuidanceState !== "centered") {
-			speechManager.speak("Perfect. Ready to take a photo.");
+			let message = "Perfect. Ready to take a photo.";
+			if (faceCount > 1) {
+				message += " I also see other people in the frame.";
+			}
+			speechManager.speak(message);
 			lastGuidanceState = "centered";
 			lastGuidanceTime = Date.now();
 		}
