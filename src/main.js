@@ -533,10 +533,6 @@ function guideUser(evals, faceCount) {
 	}
 
 	const now = Date.now();
-	if (now - lastGuidanceTime < GUIDANCE_INTERVAL) {
-		return;
-	}
-
 	let message = "";
 
 	// Priority 1: Distance
@@ -559,9 +555,14 @@ function guideUser(evals, faceCount) {
 	}
 
 	if (message) {
-		speechManager.speak(message);
-		lastGuidanceState = "guiding";
-		lastGuidanceTime = now;
+		if (
+			lastGuidanceState !== message ||
+			now - lastGuidanceTime >= GUIDANCE_INTERVAL
+		) {
+			speechManager.speak(message);
+			lastGuidanceState = message;
+			lastGuidanceTime = now;
+		}
 	}
 }
 
