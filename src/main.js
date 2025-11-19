@@ -24,6 +24,7 @@ import { FaceDetect } from "./services/face-detect.js";
 import { PhotoCapture } from "./services/photo-capture.js";
 import { PhotoStore } from "./services/photo-store.js";
 import { SpeechManager } from "./services/SpeechManager.js";
+import { SelfieSegmentation } from "./services/selfie-segmentation.js";
 import { registerDefaultVoiceCommands } from "./services/speech-commands.js";
 import { setupSpeechControlUI } from "./services/speech-control-ui.js";
 
@@ -31,6 +32,7 @@ const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
 const photoStore = new PhotoStore();
 const faceService = new FaceDetect();
+const segmentationService = new SelfieSegmentation();
 
 // Initialize speech services
 const speechManager = new SpeechManager();
@@ -42,6 +44,7 @@ app.innerHTML = `
     <section class="preview">
       <div class="video-placeholder">Awaiting camera…</div>
       <video autoplay playsinline hidden></video>
+      <canvas id="segmentation-canvas" hidden></canvas>
       <img alt="snapshot" hidden />
     </section>
     <section class="actions">
@@ -82,6 +85,7 @@ app.innerHTML = `
 `;
 
 const video = app.querySelector("video");
+const canvas = app.querySelector("#segmentation-canvas");
 const photo = app.querySelector("img");
 const captureBtn = app.querySelector('[data-action="capture"]');
 const status = app.querySelector(".status");
@@ -101,6 +105,7 @@ const deleteBtn = app.querySelector('[data-action="delete-photo"]');
 const captureView = app.querySelector(".capture");
 
 const speechControlBar = setupSpeechControlUI(speechManager);
+const contrastBtn = document.getElementById("contrastToggle");
 
 albumPhoto.addEventListener("error", () => {
 	console.warn("Failed to load image:", albumPhoto.src);
@@ -113,6 +118,7 @@ const faceBoxElements = [];
  */
 const storedPhotos = [];
 let currentPhotoIndex = 0;
+let isHighContrastMode = false;
 
 const defaultPlaceholderText = placeholder.textContent;
 
@@ -236,7 +242,8 @@ const setState = (state, overrideMessage) => {
 
 	setVisible(captureView, view.captureView);
 	setVisible(albumView, view.albumView);
-	setVisible(video, view.video);
+	setVisible(video, view.video && !isHighContrastMode);
+	setVisible(canvas, view.video && isHighContrastMode);
 	setVisible(photo, view.photo);
 	setVisible(placeholder, view.placeholder);
 
@@ -258,8 +265,10 @@ async function setupCamera() {
 
 		if (photoService.getFacingMode() === "user") {
 			video.style.transform = "scaleX(-1)";
+			canvas.style.transform = "scaleX(-1)";
 		} else {
 			video.style.transform = "none";
+			canvas.style.transform = "none";
 		}
 
 		setState(State.CAMERA_READY);
@@ -589,6 +598,41 @@ captureBtn.addEventListener("click", async () => {
 	}
 });
 
+contrastBtn.addEventListener("click", async () => {
+	isHighContrastMode = !isHighContrastMode;
+	contrastBtn.setAttribute("aria-pressed", isHighContrastMode);
+	contrastBtn.textContent = isHighContrastMode
+		? "Contrast: On"
+		: "Contrast: Off";
+	if (isHighContrastMode) {
+		contrastBtn.classList.add("active");
+	} else {
+		contrastBtn.classList.remove("active");
+	}
+
+	if (isHighContrastMode) {
+		status.textContent = "Initializing high contrast mode...";
+		try {
+			await segmentationService.init();
+			segmentationService.start(video, canvas);
+			status.textContent = "High contrast mode enabled";
+		} catch (error) {
+			console.error("Failed to init segmentation:", error);
+			status.textContent = "Failed to enable high contrast mode";
+			isHighContrastMode = false;
+			contrastBtn.setAttribute("aria-pressed", false);
+			contrastBtn.textContent = "Contrast: Off";
+			contrastBtn.classList.remove("active");
+		}
+	} else {
+		segmentationService.stop();
+		status.textContent = "High contrast mode disabled";
+	}
+
+	setVisible(video, !isHighContrastMode);
+	setVisible(canvas, isHighContrastMode);
+});
+
 albumBtn.addEventListener("click", () => {
 	initializeAlbumView(0);
 });
@@ -653,6 +697,7 @@ deleteBtn.addEventListener("click", async () => {
 window.addEventListener("beforeunload", () => {
 	photoService.dispose();
 	faceService.dispose();
+	segmentationService.dispose();
 	video.srcObject = null;
 	storedPhotos.forEach(({ url }) => {
 		URL.revokeObjectURL(url);

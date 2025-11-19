@@ -58,7 +58,8 @@ body {
 }
 
 video,
-img {
+img,
+canvas {
 	width: 100%;
 	background: #000;
 	display: block;

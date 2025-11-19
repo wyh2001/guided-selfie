@@ -15,6 +15,9 @@ export function setupSpeechControlUI(manager) {
     <button id="voiceMicBtn" class="speech-control-btn" aria-pressed="false" title="Toggle listening">
       Listening: Off
     </button>
+    <button id="contrastToggle" class="speech-control-btn" aria-pressed="false" title="Toggle high contrast">
+      Contrast: Off
+    </button>
   `;
 
 	// Insert at the top of the app
