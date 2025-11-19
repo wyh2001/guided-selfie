@@ -304,8 +304,6 @@ button:disabled {
 .speech-control-btn.active {
 	background: #000;
 	color: #fff;
-	border: none;
-	padding: 10px 16px;
 }
 
 .speech-control-btn:disabled {
