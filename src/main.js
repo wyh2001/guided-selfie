@@ -23,12 +23,20 @@ import "./style.css";
 import { FaceDetect } from "./services/face-detect.js";
 import { PhotoCapture } from "./services/photo-capture.js";
 import { PhotoStore } from "./services/photo-store.js";
-import "./webspeech.js";
+import { SpeechManager } from "./services/SpeechManager.js";
+import { registerDefaultVoiceCommands } from "./services/speech-commands.js";
+import { setupSpeechDebugUI } from "./services/speech-debug-ui.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
 const photoStore = new PhotoStore();
 const faceService = new FaceDetect();
+
+// Initialize speech services
+const speechManager = new SpeechManager();
+speechManager.enableTTS(false);
+registerDefaultVoiceCommands(speechManager);
+setupSpeechDebugUI(speechManager);
 
 app.innerHTML = `
   <main class="capture">
