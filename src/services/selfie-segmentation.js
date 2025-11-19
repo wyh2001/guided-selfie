@@ -1,7 +1,7 @@
 /*
 AI usage disclosure: 
 
-Around 65% of the code in this file is written with AI assistance,
+Around 70% of the code in this file is written with AI assistance,
 especially the part involving overlay effect implementation.
 
 */
@@ -19,10 +19,17 @@ export class SelfieSegmentation {
 		this.isRunning = false;
 		this.video = null;
 		this.canvas = null;
+		this.ctx = null;
 		this.rafId = null;
 		this.lastVideoTime = -1;
 		this.effectType = "high-contrast"; // 'high-contrast' | 'blur' | 'none'
-		this.interval = 0.1; // Default interval in seconds
+		this.interval = 0.15; // Default interval in seconds
+
+		// Processing canvas for resizing input
+		this.processingWidth = 256;
+		this.processingHeight = 256;
+		this.processingCanvas = null;
+		this.processingCtx = null;
 	}
 
 	/**
@@ -33,6 +40,14 @@ export class SelfieSegmentation {
 		if (this.segmenter) {
 			return this.segmenter;
 		}
+
+		// Initialize processing canvas
+		this.processingCanvas = document.createElement("canvas");
+		this.processingCanvas.width = this.processingWidth;
+		this.processingCanvas.height = this.processingHeight;
+		this.processingCtx = this.processingCanvas.getContext("2d", {
+			willReadFrequently: true,
+		});
 
 		this.mode = options.runningMode ?? "VIDEO";
 		const vision = await FilesetResolver.forVisionTasks(
@@ -58,13 +73,14 @@ export class SelfieSegmentation {
 	 * @param {HTMLCanvasElement} canvas
 	 * @param {number} interval - Update interval in seconds
 	 */
-	start(video, canvas, interval = 0.1) {
+	start(video, canvas, interval = 0.15) {
 		if (!this.segmenter) {
 			console.error("Segmenter not initialized");
 			return;
 		}
 		this.video = video;
 		this.canvas = canvas;
+		this.ctx = this.canvas.getContext("2d");
 		this.interval = interval;
 		this.isRunning = true;
 		this.loop();
@@ -80,9 +96,8 @@ export class SelfieSegmentation {
 			this.rafId = null;
 		}
 		// Clear canvas
-		if (this.canvas) {
-			const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
-			ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		if (this.canvas && this.ctx) {
+			this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		}
 	}
 
@@ -97,7 +112,7 @@ export class SelfieSegmentation {
 	/**
 	 * Main segmentation loop
 	 */
-	async loop() {
+	loop() {
 		if (!this.isRunning) return;
 
 		const currentTime = this.video.currentTime;
@@ -106,7 +121,19 @@ export class SelfieSegmentation {
 			const startTimeMs = performance.now();
 
 			if (this.segmenter) {
-				const result = this.segmenter.segmentForVideo(this.video, startTimeMs);
+				// Draw video to processing canvas
+				this.processingCtx.drawImage(
+					this.video,
+					0,
+					0,
+					this.processingWidth,
+					this.processingHeight,
+				);
+
+				const result = this.segmenter.segmentForVideo(
+					this.processingCanvas,
+					startTimeMs,
+				);
 				this.draw(result);
 			}
 		}
@@ -119,10 +146,12 @@ export class SelfieSegmentation {
 	 * @param {ImageSegmenterResult} result
 	 */
 	draw(result) {
-		if (!this.canvas || !this.video) return;
-		const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
+		if (!this.canvas || !this.video || !this.ctx) return;
+		const ctx = this.ctx;
 		const width = this.video.videoWidth;
 		const height = this.video.videoHeight;
+
+		if (!width || !height) return;
 
 		if (this.canvas.width !== width || this.canvas.height !== height) {
 			this.canvas.width = width;
@@ -141,7 +170,20 @@ export class SelfieSegmentation {
 		if (!mask) return;
 
 		if (this.effectType === "high-contrast") {
-			this.drawHighContrast(ctx, mask, width, height);
+			this.drawHighContrastOnProcessing(mask);
+			// Draw the processed small canvas scaled up to the main canvas
+			ctx.imageSmoothingEnabled = true;
+			ctx.drawImage(
+				this.processingCanvas,
+				0,
+				0,
+				this.processingWidth,
+				this.processingHeight,
+				0,
+				0,
+				width,
+				height,
+			);
 		} else if (this.effectType === "blur") {
 			// TBD
 			ctx.drawImage(this.video, 0, 0, width, height);
@@ -151,41 +193,39 @@ export class SelfieSegmentation {
 	}
 
 	/**
-	 * Draw high contrast overlay
-	 * @param {CanvasRenderingContext2D} ctx
+	 * Draw high contrast overlay on the processing canvas (256x256)
 	 * @param {SegmentationMask} mask
-	 * @param {number} width
-	 * @param {number} height
 	 */
-	drawHighContrast(ctx, mask, width, height) {
-		// Draw the video frame first
-		ctx.drawImage(this.video, 0, 0, width, height);
+	drawHighContrastOnProcessing(mask) {
+		const ctxSmall = this.processingCtx;
+		const w = this.processingWidth;
+		const h = this.processingHeight;
 
-		// Get the video data
-		const imageData = ctx.getImageData(0, 0, width, height);
+		// Get the video data from the processing canvas (already drawn in loop)
+		const imageData = ctxSmall.getImageData(0, 0, w, h);
 		const pixels = imageData.data;
 
 		// Get mask data as floats (0.0 to 1.0)
 		const maskData = mask.getAsFloat32Array();
 
-		for (let i = 0; i < maskData.length; ++i) {
-			const score = maskData[i]; // 0.0 (background) to 1.0 (person)
-			const offset = i * 4;
+		const len = w * h;
 
+		// Person Overlay: Gold
+		const personR = 255;
+		const personG = 215;
+		const personB = 0;
+		const personAlpha = 0.9;
+
+		// Background Overlay: Black
+		const bgR = 0;
+		const bgG = 0;
+		const bgB = 0;
+		const bgAlpha = 1.0;
+
+		for (let i = 0; i < len; ++i) {
+			const score = maskData[i]; // 0.0 (background) to 1.0 (person)
 			const isPerson = score;
 			const isBackground = 1 - score;
-
-			// Person Overlay: Gold
-			const personR = 255;
-			const personG = 215;
-			const personB = 0;
-			const personAlpha = 0.9; // Keep slight detail
-
-			// Background Overlay: Black
-			const bgR = 0;
-			const bgG = 0;
-			const bgB = 0;
-			const bgAlpha = 1.0;
 
 			// Interpolate overlay color and alpha based on the mask score
 			const targetR = isPerson * personR + isBackground * bgR;
@@ -193,16 +233,19 @@ export class SelfieSegmentation {
 			const targetB = isPerson * personB + isBackground * bgB;
 			const targetAlpha = isPerson * personAlpha + isBackground * bgAlpha;
 
+			const offset = i * 4;
+
+			const srcR = pixels[offset];
+			const srcG = pixels[offset + 1];
+			const srcB = pixels[offset + 2];
+
 			// Apply blending
-			pixels[offset] =
-				pixels[offset] * (1 - targetAlpha) + targetR * targetAlpha; // R
-			pixels[offset + 1] =
-				pixels[offset + 1] * (1 - targetAlpha) + targetG * targetAlpha; // G
-			pixels[offset + 2] =
-				pixels[offset + 2] * (1 - targetAlpha) + targetB * targetAlpha; // B
+			pixels[offset] = srcR * (1 - targetAlpha) + targetR * targetAlpha; // R
+			pixels[offset + 1] = srcG * (1 - targetAlpha) + targetG * targetAlpha; // G
+			pixels[offset + 2] = srcB * (1 - targetAlpha) + targetB * targetAlpha; // B
 		}
 
-		ctx.putImageData(imageData, 0, 0);
+		ctxSmall.putImageData(imageData, 0, 0);
 	}
 
 	/**
