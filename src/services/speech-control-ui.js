@@ -36,8 +36,7 @@ export function setupSpeechControlUI(manager) {
 
 	// TTS toggle
 	ttsToggle.addEventListener("click", () => {
-		const newState = manager.toggleTTS();
-		updateTTSButton(newState);
+		manager.toggleTTS();
 	});
 
 	// Update UI when recognition starts
