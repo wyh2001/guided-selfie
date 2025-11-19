@@ -1,68 +1,14 @@
 /**
- * Web Speech Integration
- * This file sets up the speech services and UI.
- * The actual speech logic is in separate service files.
+ * Speech Debug UI
+ * Optional debug interface for speech recognition and TTS.
+ * Can be enabled/disabled as needed during development.
  */
-import { SpeechManager } from './services/SpeechManager.js';
 
-const speechManager = new SpeechManager();
-
-// COMMAND HANDLERS
-
-function setupCommands() {
-  // Capture/photo commands
-  speechManager.registerCommand('take', (transcript) => {
-    if (transcript.includes('photo') || transcript.includes('capture') || transcript.includes('snap')) {
-      dispatchVoiceCommand('take-photo');
-      speechManager.speak('Photo captured');
-    }
-  });
-
-  speechManager.registerCommand('capture', () => {
-    dispatchVoiceCommand('take-photo');
-    speechManager.speak('Capturing photo');
-  });
-
-  speechManager.registerCommand('snap', () => {
-    dispatchVoiceCommand('take-photo');
-    speechManager.speak('Snap');
-  });
-
-  // Movement commands
-  speechManager.registerCommand('left', () => {
-    dispatchVoiceCommand('left');
-    speechManager.speak('Moving left');
-  });
-
-  speechManager.registerCommand('right', () => {
-    dispatchVoiceCommand('right');
-    speechManager.speak('Moving right');
-  });
-
-  // Zoom commands
-  speechManager.registerCommand('zoom in', () => {
-    dispatchVoiceCommand('zoom-in');
-    speechManager.speak('Zooming in');
-  });
-
-  speechManager.registerCommand('zoom out', () => {
-    dispatchVoiceCommand('zoom-out');
-    speechManager.speak('Zooming out');
-  });
-}
-
-function dispatchVoiceCommand(command) {
-  // Dispatch custom event that other parts of the app can listen to
-  document.dispatchEvent(new CustomEvent('voice:command', {
-    detail: { command }
-  }));
-
-  console.log('Voice command dispatched:', command);
-}
-
-// UI SETUP
-
-function setupUI() {
+/**
+ * Set up debug UI for speech services
+ * @param {SpeechManager} manager - The SpeechManager instance to connect to
+ */
+export function setupSpeechDebugUI(manager) {
   // Create the voice control UI container
   const container = document.createElement('div');
   container.id = 'voice-control-container';
@@ -113,21 +59,21 @@ function setupUI() {
 
   // Microphone button - toggle listening
   micBtn.addEventListener('click', () => {
-    speechManager.toggleListening();
+    manager.toggleListening();
   });
 
   // Language selector
   voiceLang.addEventListener('change', (e) => {
-    speechManager.setLanguage(e.target.value);
+    manager.setLanguage(e.target.value);
   });
 
   // TTS toggle
   ttsToggle.addEventListener('change', (e) => {
-    speechManager.enableTTS(e.target.checked);
+    manager.enableTTS(e.target.checked);
   });
 
   // Update UI when recognition starts
-  speechManager.onRecognitionStart(() => {
+  manager.onRecognitionStart(() => {
     voiceStatus.textContent = 'Voice: listening...';
     micBtn.setAttribute('aria-pressed', 'true');
     micBtn.style.background = 'rgba(255, 0, 0, 0.3)';
@@ -135,7 +81,7 @@ function setupUI() {
   });
 
   // Update UI when recognition ends
-  speechManager.onRecognitionEnd(() => {
+  manager.onRecognitionEnd(() => {
     voiceStatus.textContent = 'Voice: off';
     micBtn.setAttribute('aria-pressed', 'false');
     micBtn.style.background = 'transparent';
@@ -143,46 +89,29 @@ function setupUI() {
   });
 
   // Update UI when recognition errors occur
-  speechManager.onRecognitionError((error) => {
+  manager.onRecognitionError((error) => {
     voiceStatus.textContent = `Voice: error (${error})`;
     console.error('Recognition error:', error);
   });
 
   // Update UI when TTS state changes
-  speechManager.onTTSEnabledChange((enabled) => {
+  manager.onTTSEnabledChange((enabled) => {
     ttsToggle.checked = enabled;
   });
-}
 
-// INITIALIZATION
-
-function init() {
   // Check if speech features are supported
-  const support = speechManager.isSupported();
+  const support = manager.isSupported();
   
   if (!support.recognition) {
     console.warn('Speech Recognition is not supported in this browser');
+    voiceStatus.textContent = 'Voice: unsupported';
+    micBtn.disabled = true;
   }
   
   if (!support.tts) {
     console.warn('Text-to-Speech is not supported in this browser');
+    ttsToggle.disabled = true;
   }
 
-  // Set up command handlers
-  setupCommands();
-
-  // Set up UI
-  setupUI();
-
-  console.log('Speech services initialized');
+  console.log('Speech debug UI initialized');
 }
-
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
-
-// Export for module usage
-export { speechManager };
