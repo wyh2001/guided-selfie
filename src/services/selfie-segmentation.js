@@ -22,7 +22,7 @@ export class SelfieSegmentation {
 		this.rafId = null;
 		this.lastVideoTime = -1;
 		this.effectType = "high-contrast"; // 'high-contrast' | 'blur' | 'none'
-		this.interval = 0.2; // Default interval in seconds
+		this.interval = 0.1; // Default interval in seconds
 	}
 
 	/**
@@ -58,7 +58,7 @@ export class SelfieSegmentation {
 	 * @param {HTMLCanvasElement} canvas
 	 * @param {number} interval - Update interval in seconds
 	 */
-	start(video, canvas, interval = 0.2) {
+	start(video, canvas, interval = 0.1) {
 		if (!this.segmenter) {
 			console.error("Segmenter not initialized");
 			return;
@@ -81,7 +81,7 @@ export class SelfieSegmentation {
 		}
 		// Clear canvas
 		if (this.canvas) {
-			const ctx = this.canvas.getContext("2d");
+			const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
 			ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		}
 	}
@@ -120,7 +120,7 @@ export class SelfieSegmentation {
 	 */
 	draw(result) {
 		if (!this.canvas || !this.video) return;
-		const ctx = this.canvas.getContext("2d");
+		const ctx = this.canvas.getContext("2d", { willReadFrequently: true });
 		const width = this.video.videoWidth;
 		const height = this.video.videoHeight;
 
