@@ -30,6 +30,7 @@ export class SelfieSegmentation {
 		this.processingHeight = 256;
 		this.processingCanvas = null;
 		this.processingCtx = null;
+		this._boundLoop = this.loop.bind(this);
 	}
 
 	/**
@@ -73,7 +74,7 @@ export class SelfieSegmentation {
 	 * @param {HTMLCanvasElement} canvas
 	 * @param {number} interval - Update interval in seconds
 	 */
-	start(video, canvas, interval = 0.15) {
+	start(video, canvas, interval = 0.1) {
 		if (!this.segmenter) {
 			console.error("Segmenter not initialized");
 			return;
@@ -83,7 +84,12 @@ export class SelfieSegmentation {
 		this.ctx = this.canvas.getContext("2d");
 		this.interval = interval;
 		this.isRunning = true;
-		this.loop();
+
+		if (this.video.requestVideoFrameCallback) {
+			this.rafId = this.video.requestVideoFrameCallback(this._boundLoop);
+		} else {
+			this.rafId = requestAnimationFrame(this._boundLoop);
+		}
 	}
 
 	/**
@@ -92,7 +98,11 @@ export class SelfieSegmentation {
 	stop() {
 		this.isRunning = false;
 		if (this.rafId) {
-			cancelAnimationFrame(this.rafId);
+			if (this.video?.cancelVideoFrameCallback) {
+				this.video.cancelVideoFrameCallback(this.rafId);
+			} else {
+				cancelAnimationFrame(this.rafId);
+			}
 			this.rafId = null;
 		}
 		// Clear canvas
@@ -111,12 +121,23 @@ export class SelfieSegmentation {
 
 	/**
 	 * Main segmentation loop
+	 * @param {DOMHighResTimeStamp} _now
+	 * @param {VideoFrameCallbackMetadata} _metadata
 	 */
-	loop() {
-		if (!this.isRunning) return;
+	loop(_now, _metadata) {
+		if (!this.isRunning || !this.video) return;
+
+		// Check if video is ready and playing
+		if (this.video.readyState < 2 || this.video.paused || this.video.ended) {
+			this._scheduleNextLoop();
+			return;
+		}
 
 		const currentTime = this.video.currentTime;
-		if (currentTime - this.lastVideoTime >= this.interval) {
+		if (
+			this.lastVideoTime < 0 || // First frame always runs
+			currentTime - this.lastVideoTime >= this.interval
+		) {
 			this.lastVideoTime = currentTime;
 			const startTimeMs = performance.now();
 
@@ -138,7 +159,20 @@ export class SelfieSegmentation {
 			}
 		}
 
-		this.rafId = requestAnimationFrame(() => this.loop());
+		this._scheduleNextLoop();
+	}
+
+	/**
+	 * Schedule the next loop iteration
+	 * @private
+	 */
+	_scheduleNextLoop() {
+		if (!this.isRunning || !this.video) return;
+		if (this.video.requestVideoFrameCallback) {
+			this.rafId = this.video.requestVideoFrameCallback(this._boundLoop);
+		} else {
+			this.rafId = requestAnimationFrame(this._boundLoop);
+		}
 	}
 
 	/**
