@@ -49,13 +49,13 @@ export function setupSpeechControlUI(manager) {
 	// Update UI when recognition starts
 	manager.onRecognitionStart(() => {
 		updateVoiceButton(true);
-		startSound.play().catch(() => {});
+		// startSound.play().catch(() => {});
 	});
 
 	// Update UI when recognition ends
 	manager.onRecognitionEnd(() => {
 		updateVoiceButton(false);
-		stopSound.play().catch(() => {});
+		// stopSound.play().catch(() => {});
 	});
 
 	// Update UI when TTS state changes
