@@ -96,9 +96,9 @@ export class FaceDetect {
 	 * Detect faces in a video frame
 	 * @param {HTMLVideoElement} video - The video element
 	 * @param {number} interval - Minimum interval between detections in seconds
-	 * @returns {Array} Array of detected faces
+	 * @returns {Promise<Array>} Array of detected faces
 	 */
-	detectVideo(video, interval = 0.3) {
+	async detectVideo(video, interval = 0.3) {
 		if (!this.detector) {
 			throw new Error("Face detector not initialized");
 		}
@@ -107,6 +107,18 @@ export class FaceDetect {
 			throw new Error("Video element is required");
 		}
 
+		await this._useMode("VIDEO");
+		return this._detectVideoFast(video, interval);
+	}
+
+	/**
+	 * Internal fast path for video detection, assumes mode === "VIDEO"
+	 * @param {HTMLVideoElement} video
+	 * @param {number} interval
+	 * @returns {Array}
+	 * @private
+	 */
+	_detectVideoFast(video, interval = 0.3) {
 		if (
 			this.lastVideoTime >= 0 &&
 			video.currentTime - this.lastVideoTime < interval
@@ -147,8 +159,10 @@ export class FaceDetect {
 
 	/**
 	 * Main detection loop
+	 * @param {DOMHighResTimeStamp} _now
+	 * @param {VideoFrameCallbackMetadata} _metadata
 	 */
-	loop() {
+	loop(_now, _metadata) {
 		if (!this.isRunning || !this.video) return;
 
 		const v = this.video;
@@ -159,7 +173,7 @@ export class FaceDetect {
 		}
 
 		try {
-			this.detectVideo(v, this.interval);
+			this._detectVideoFast(v, this.interval);
 			if (this.onResults) {
 				this.onResults(this.detections);
 			}

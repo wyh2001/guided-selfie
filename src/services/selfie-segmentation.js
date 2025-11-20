@@ -30,6 +30,7 @@ export class SelfieSegmentation {
 		this.processingHeight = 256;
 		this.processingCanvas = null;
 		this.processingCtx = null;
+		this._boundLoop = this.loop.bind(this);
 	}
 
 	/**
@@ -85,9 +86,9 @@ export class SelfieSegmentation {
 		this.isRunning = true;
 
 		if (this.video.requestVideoFrameCallback) {
-			this.rafId = this.video.requestVideoFrameCallback(this.loop.bind(this));
+			this.rafId = this.video.requestVideoFrameCallback(this._boundLoop);
 		} else {
-			this.loop();
+			this.rafId = requestAnimationFrame(this._boundLoop);
 		}
 	}
 
@@ -120,12 +121,23 @@ export class SelfieSegmentation {
 
 	/**
 	 * Main segmentation loop
+	 * @param {DOMHighResTimeStamp} _now
+	 * @param {VideoFrameCallbackMetadata} _metadata
 	 */
-	loop() {
-		if (!this.isRunning) return;
+	loop(_now, _metadata) {
+		if (!this.isRunning || !this.video) return;
+
+		// Check if video is ready and playing
+		if (this.video.readyState < 2 || this.video.paused || this.video.ended) {
+			this._scheduleNextLoop();
+			return;
+		}
 
 		const currentTime = this.video.currentTime;
-		if (currentTime - this.lastVideoTime >= this.interval) {
+		if (
+			this.lastVideoTime < 0 || // First frame always runs
+			currentTime - this.lastVideoTime >= this.interval
+		) {
 			this.lastVideoTime = currentTime;
 			const startTimeMs = performance.now();
 
@@ -147,10 +159,19 @@ export class SelfieSegmentation {
 			}
 		}
 
+		this._scheduleNextLoop();
+	}
+
+	/**
+	 * Schedule the next loop iteration
+	 * @private
+	 */
+	_scheduleNextLoop() {
+		if (!this.isRunning || !this.video) return;
 		if (this.video.requestVideoFrameCallback) {
-			this.rafId = this.video.requestVideoFrameCallback(this.loop.bind(this));
+			this.rafId = this.video.requestVideoFrameCallback(this._boundLoop);
 		} else {
-			this.rafId = requestAnimationFrame(() => this.loop());
+			this.rafId = requestAnimationFrame(this._boundLoop);
 		}
 	}
 
