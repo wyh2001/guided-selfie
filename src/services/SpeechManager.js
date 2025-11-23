@@ -12,6 +12,10 @@ export class SpeechManager {
     this.tts = new TextToSpeechService();
     this.commandHandlers = new Map();
     
+    this._currentSpeakToken = null; // Make sure only latest speak resumes listening
+    this._suspendedByTTS = false;
+    this._wantListening = false; // Whether user wants listening active
+    
     // Set up command processing
     this.setupCommandProcessing();
   }
@@ -25,12 +29,41 @@ export class SpeechManager {
   // TEXT-TO-SPEECH METHODS
 
   /**
-   * Speak text (respects enabled state)
+   * Speak text with automatic listening suspension and restoration
    * @param {string} text - Text to speak
    * @param {Object} options - Optional speech parameters
+   * @returns {Promise<boolean>} - Whether speech was actually spoken
    */
-  speak(text, options = {}) {
-    return this.tts.speak(text, options);
+  async speak(text, options = {}) {
+    // Do nothing if TTS is disabled or unsupported
+    if (!this.tts.isEnabled() || !this.tts.isSupported() || !text?.trim()) {
+      return false;
+    }
+
+    // Create unique token for this speak operation
+    const token = Symbol('speak');
+    this._currentSpeakToken = token;
+
+    // Remember if listening (to restore later)
+    const wasListening = this.isListening();
+    if (wasListening) {
+      await this._stopListeningInternal({ markSuspended: true });
+    }
+
+    // Speak
+    const success = await this.tts.speakAsync(text, options);
+
+    if (this._currentSpeakToken === token) {
+      this._currentSpeakToken = null;
+
+      // Restore only if suspended by TTS and previously active
+      if (this._suspendedByTTS && wasListening) {
+        await this._startListeningInternal();
+      }
+      this._suspendedByTTS = false;
+    }
+
+    return success;
   }
 
   /**
@@ -38,7 +71,11 @@ export class SpeechManager {
    * @param {boolean} enabled
    */
   enableTTS(enabled) {
-    this.tts.setEnabled(enabled);
+    // Cancle if disabling while speaking
+    if (!enabled && this.tts.isSpeaking()) {
+      this.cancelSpeech();
+    }
+    this.tts.setEnabled(!!enabled);
   }
 
   /**
@@ -60,6 +97,8 @@ export class SpeechManager {
    */
   cancelSpeech() {
     this.tts.cancel();
+    this._currentSpeakToken = null;
+    this._suspendedByTTS = false;
   }
 
   // SPEECH RECOGNITION METHODS (can be called anywhere)
@@ -68,22 +107,31 @@ export class SpeechManager {
   /**
    * Start listening for voice commands
    */
-  startListening() {
-    return this.recognition.start();
+  async startListening() {
+    this._wantListening = true;
+    // If currently speaking, cancle it
+    if (this.isSpeakingNow()) {
+      this.cancelSpeech();
+    }
+    await this._startListeningInternal();
   }
 
   /**
    * Stop listening for voice commands
    */
-  stopListening() {
-    return this.recognition.stop();
+  async stopListening() {
+    this._wantListening = false;
+    await this._stopListeningInternal({ markSuspended: false });
   }
 
   /**
    * Toggle listening state
    */
   toggleListening() {
-    return this.recognition.toggle();
+    if (this.isListening()) {
+      return this.stopListening();
+    }
+    return this.startListening();
   }
 
   /**
@@ -127,6 +175,7 @@ export class SpeechManager {
    */
   processCommand(transcript) {
     const text = transcript.toLowerCase().trim();
+    let commandMatched = false;
     
     // Try to match against registered command handlers
     for (const [pattern, handler] of this.commandHandlers.entries()) {
@@ -139,12 +188,20 @@ export class SpeechManager {
       }
       
       if (matched) {
+        commandMatched = true;
         try {
           handler(transcript, text);
         } catch (error) {
           console.error('Error executing command handler:', error);
         }
       }
+    }
+
+    // If no command matched, dispatch as raw transcript for LLM
+    if (!commandMatched) {
+      document.dispatchEvent(new CustomEvent('voice:command', {
+        detail: { command: `transcript:${transcript}` }
+      }));
     }
   }
 
@@ -206,5 +263,54 @@ export class SpeechManager {
       ttsEnabled: this.tts.isEnabled(),
       language: this.recognition.getLanguage()
     };
+  }
+
+  /**
+   * Check if TTS is currently speaking
+   */
+  isSpeakingNow() {
+    return this.tts.isSpeaking();
+  }
+
+  /**
+   * Internal method to start listening
+   * @private
+   */
+  async _startListeningInternal() {
+    if (this.isListening()) {
+      return;
+    }
+    // Ensure no TTS is speaking
+    if (this.isSpeakingNow()) {
+      this.cancelSpeech();
+    }
+    try {
+      await this.recognition.start();
+    } catch (error) {
+      console.error('Failed to start listening:', error);
+    }
+  }
+
+  /**
+   * Internal method to stop listening
+   * @param {Object} options - { markSuspended: boolean }
+   * @private
+   */
+  async _stopListeningInternal({ markSuspended }) {
+    if (!this.isListening()) {
+      if (markSuspended) {
+        this._suspendedByTTS = true;
+      }
+      return;
+    }
+    try {
+      await this.recognition.stop();
+    } catch (error) {
+      console.error('Failed to stop listening:', error);
+    } finally {
+      if (markSuspended) {
+        this._suspendedByTTS = true;
+      }
+    }
   }
 }

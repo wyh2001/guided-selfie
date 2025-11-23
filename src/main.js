@@ -20,24 +20,29 @@ This will be updated over time when the project evolves.
 
 */
 import "./style.css";
+import { z } from "zod";
+import { performCapture as sharedPerformCapture } from "./services/capture-flow.js";
+import { EffectsController } from "./services/effects.js";
 import { FaceDetect } from "./services/face-detect.js";
+import { LLMService } from "./services/llm-service.js";
 import { PhotoCapture } from "./services/photo-capture.js";
 import { PhotoStore } from "./services/photo-store.js";
 import { SpeechManager } from "./services/SpeechManager.js";
 import { SelfieSegmentation } from "./services/selfie-segmentation.js";
-import { registerDefaultVoiceCommands } from "./services/speech-commands.js";
 import { setupSpeechControlUI } from "./services/speech-control-ui.js";
+import { ToolManager } from "./services/tool-manager.js";
 
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
 const photoStore = new PhotoStore();
 const faceService = new FaceDetect();
 const segmentationService = new SelfieSegmentation();
+const toolManager = new ToolManager();
+const llmService = new LLMService();
 
 // Initialize speech services
 const speechManager = new SpeechManager();
 speechManager.enableTTS(true);
-registerDefaultVoiceCommands(speechManager);
 
 app.innerHTML = `
   <main class="capture">
@@ -118,7 +123,23 @@ const faceBoxElements = [];
  */
 const storedPhotos = [];
 let currentPhotoIndex = 0;
-let isHighContrastMode = false;
+const effectsCtx = {
+	segmentationService,
+	videoEl: video,
+	canvasEl: canvas,
+	statusEl: status,
+};
+const effects = new EffectsController(effectsCtx);
+
+const captureCtx = {
+	effects,
+	segmentationService,
+	photoService,
+	photoStore,
+	statusEl: status,
+	storedPhotos,
+	refreshAlbumThumbnail,
+};
 
 const defaultPlaceholderText = placeholder.textContent;
 
@@ -202,6 +223,12 @@ const stateView = {
 	},
 };
 
+const updatePreviewVisibility = () => {
+	const useCanvas = effects.previewUsesCanvas();
+	setVisible(video, !useCanvas);
+	setVisible(canvas, useCanvas);
+};
+
 const setState = (state, overrideMessage) => {
 	const view = stateView[state];
 	if (!view) {
@@ -242,8 +269,11 @@ const setState = (state, overrideMessage) => {
 
 	setVisible(captureView, view.captureView);
 	setVisible(albumView, view.albumView);
-	setVisible(video, view.video && !isHighContrastMode);
-	setVisible(canvas, view.video && isHighContrastMode);
+	setVisible(video, view.video);
+	setVisible(canvas, view.video);
+	if (view.video) {
+		updatePreviewVisibility();
+	}
 	setVisible(photo, view.photo);
 	setVisible(placeholder, view.placeholder);
 
@@ -514,9 +544,19 @@ function evaluateFacePosition(detections, videoWidth, videoHeight) {
 let lastGuidanceTime = 0;
 let lastGuidanceState = null;
 const GUIDANCE_INTERVAL = 4000;
+let isProcessingCommand = false;
 
 function guideUser(evals, faceCount) {
 	if (evals.length === 0) {
+		return;
+	}
+
+	// If user is currently speaking/listening, or LLM is processing, DO NOT interrupt with guidance
+	if (
+		speechManager.isListening() ||
+		speechManager.isSpeakingNow() ||
+		isProcessingCommand
+	) {
 		return;
 	}
 
@@ -574,63 +614,17 @@ function guideUser(evals, faceCount) {
 	}
 }
 
-captureBtn.addEventListener("click", async () => {
-	try {
-		status.textContent = "Capturing…";
-		const { blob } = await photoService.captureWithBlob();
-		const url = URL.createObjectURL(blob);
-		try {
-			const { id, createdAt } = await photoStore.addPhoto(blob);
-			storedPhotos.push({ id, url, createdAt });
-			refreshAlbumThumbnail();
-		} catch (storageError) {
-			console.error("Failed to persist photo:", storageError);
-			try {
-				URL.revokeObjectURL(url);
-			} catch (_) {}
-		}
-		status.textContent = "Photo saved";
-		setTimeout(() => {
-			status.textContent = "Look at the camera";
-		}, 1000);
-	} catch (error) {
-		status.textContent = `Capture failed: ${error.message}`;
-	}
+captureBtn.addEventListener("click", () => {
+	sharedPerformCapture(captureCtx);
 });
 
 contrastBtn.addEventListener("click", async () => {
-	isHighContrastMode = !isHighContrastMode;
-	contrastBtn.setAttribute("aria-pressed", isHighContrastMode);
-	contrastBtn.textContent = isHighContrastMode
-		? "Contrast: On"
-		: "Contrast: Off";
-	if (isHighContrastMode) {
-		contrastBtn.classList.add("active");
-	} else {
-		contrastBtn.classList.remove("active");
-	}
-
-	if (isHighContrastMode) {
-		status.textContent = "Initializing high contrast mode...";
-		try {
-			await segmentationService.init();
-			segmentationService.start(video, canvas);
-			status.textContent = "High contrast mode enabled";
-		} catch (error) {
-			console.error("Failed to init segmentation:", error);
-			status.textContent = "Failed to enable high contrast mode";
-			isHighContrastMode = false;
-			contrastBtn.setAttribute("aria-pressed", false);
-			contrastBtn.textContent = "Contrast: Off";
-			contrastBtn.classList.remove("active");
-		}
-	} else {
-		segmentationService.stop();
-		status.textContent = "High contrast mode disabled";
-	}
-
-	setVisible(video, !isHighContrastMode);
-	setVisible(canvas, isHighContrastMode);
+	const target = !effects.isHighContrastOn;
+	contrastBtn.setAttribute("aria-pressed", target);
+	contrastBtn.textContent = target ? "Contrast: On" : "Contrast: Off";
+	contrastBtn.classList.toggle("active", target);
+	await effects.setHighContrast(target);
+	updatePreviewVisibility();
 });
 
 albumBtn.addEventListener("click", () => {
@@ -709,23 +703,115 @@ window.addEventListener("beforeunload", () => {
 	setupCamera();
 })();
 
+// Register Tools
+toolManager.registerTool(
+	"take_photo",
+	"Take one or more photos with optional delay",
+	z.object({
+		count: z.number().describe("Number of photos to take").default(1),
+		delay: z.number().describe("Delay in seconds before each photo").default(0),
+	}),
+	async ({ count = 1, delay = 0 }) => {
+		console.log(`Taking ${count} photos with ${delay}s delay`);
+		for (let i = 0; i < count; i++) {
+			if (delay > 0) {
+				await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+			}
+			await sharedPerformCapture(captureCtx);
+		}
+		return "Photos taken";
+	},
+);
+
+toolManager.registerTool(
+	"set_blur",
+	"Enable or disable background blur",
+	z.object({
+		enable: z.boolean().describe("True to enable blur, false to disable"),
+	}),
+	async ({ enable }) => {
+		await effects.setBlur(!!enable);
+		updatePreviewVisibility();
+		return `Blur set to ${enable}`;
+	},
+);
+
+toolManager.registerTool(
+	"describe_photo",
+	"Describe the current scene using AI",
+	z.object({}),
+	async () => {
+		// Mock implementation
+		const { blob } = await photoService.captureWithBlob();
+		console.log("Captured blob for description:", blob);
+		// TODO: Send to vLLM
+		return "This is a description of the photo (mock).";
+	},
+);
+
+toolManager.registerTool(
+	"open_album",
+	"Open the photo album",
+	z.object({}),
+	async () => {
+		initializeAlbumView(0);
+		return "Album opened";
+	},
+);
+
+toolManager.registerTool(
+	"open_camera",
+	"Open the camera view",
+	z.object({}),
+	async () => {
+		setState(State.READY, "Look at the camera");
+		return "Camera opened";
+	},
+);
+
+window.toolManager = toolManager;
+
 // Handle voice commands
-document.addEventListener("voice:command", (event) => {
+document.addEventListener("voice:command", async (event) => {
 	const { command } = event.detail;
 	console.log("Received voice command:", command);
+
+	// If it's a raw transcript (not a pre-defined command), send to LLM
+	if (command.startsWith("transcript:")) {
+		const transcript = command.replace("transcript:", "").trim();
+		console.log("Processing transcript with LLM:", transcript);
+		status.textContent = "Thinking...";
+		isProcessingCommand = true;
+
+		try {
+			const result = await llmService.send(transcript, {
+				tools: toolManager.getTools(),
+				system:
+					"You are a helpful selfie camera assistant. You can take photos, control camera settings like blur, and describe what you see. Use the available tools to fulfill the user's request. If the user asks to take a photo, use the take_photo tool. If they want to blur the background, use set_blur. After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. If you are unsure, ask for clarification, like 'Did you mean to ...?'",
+			});
+
+			console.log("LLM Result:", result);
+			if (result.text) {
+				speechManager.speak(result.text);
+				status.textContent = result.text;
+			} else {
+				status.textContent = "Done";
+			}
+		} catch (error) {
+			console.error("LLM Error:", error);
+			status.textContent = "Sorry, I encountered an error.";
+			speechManager.speak("Sorry, I encountered an error.");
+		} finally {
+			isProcessingCommand = false;
+		}
+		return;
+	}
 
 	switch (command) {
 		case "take-photo":
 			if (captureBtn && !captureBtn.disabled) {
 				captureBtn.click();
 			}
-			break;
-		case "left":
-		case "right":
-		case "zoom-in":
-		case "zoom-out":
-			// TBD
-			console.log(`Position/zoom guidance: ${command}`);
 			break;
 		default:
 			console.log(`Unhandled voice command: ${command}`);
