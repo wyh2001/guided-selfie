@@ -111,6 +111,7 @@ const captureView = app.querySelector(".capture");
 
 const speechControlBar = setupSpeechControlUI(speechManager);
 const contrastBtn = document.getElementById("contrastToggle");
+const blurBtn = document.getElementById("blurToggle");
 
 albumPhoto.addEventListener("error", () => {
 	console.warn("Failed to load image:", albumPhoto.src);
@@ -624,6 +625,15 @@ contrastBtn.addEventListener("click", async () => {
 	contrastBtn.textContent = target ? "Contrast: On" : "Contrast: Off";
 	contrastBtn.classList.toggle("active", target);
 	await effects.setHighContrast(target);
+	updatePreviewVisibility();
+});
+
+blurBtn.addEventListener("click", async () => {
+	const target = !effects.isBlurOn;
+	blurBtn.setAttribute("aria-pressed", target);
+	blurBtn.textContent = target ? "Blur: On" : "Blur: Off";
+	blurBtn.classList.toggle("active", target);
+	await effects.setBlur(target);
 	updatePreviewVisibility();
 });
 

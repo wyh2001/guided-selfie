@@ -18,6 +18,9 @@ export function setupSpeechControlUI(manager) {
     <button id="contrastToggle" class="speech-control-btn" aria-pressed="false" title="Toggle high contrast">
       Contrast: Off
     </button>
+    <button id="blurToggle" class="speech-control-btn" aria-pressed="false" title="Toggle background blur">
+      Blur: Off
+    </button>
   `;
 
 	// Insert at the top of the app
