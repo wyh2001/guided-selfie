@@ -546,6 +546,7 @@ let lastGuidanceTime = 0;
 let lastGuidanceState = null;
 const GUIDANCE_INTERVAL = 4000;
 let isProcessingCommand = false;
+let lastLlmSpeakEndedAt = 0;
 
 function guideUser(evals, faceCount) {
 	if (evals.length === 0) {
@@ -558,6 +559,12 @@ function guideUser(evals, faceCount) {
 		speechManager.isSpeakingNow() ||
 		isProcessingCommand
 	) {
+		return;
+	}
+
+	// Cooldown after LLM finished speaking
+	const now = Date.now();
+	if (now - lastLlmSpeakEndedAt < 500) {
 		return;
 	}
 
@@ -582,7 +589,6 @@ function guideUser(evals, faceCount) {
 		return;
 	}
 
-	const now = Date.now();
 	if (now - lastGuidanceTime < GUIDANCE_INTERVAL) {
 		return;
 	}
@@ -630,10 +636,15 @@ contrastBtn.addEventListener("click", async () => {
 
 blurBtn.addEventListener("click", async () => {
 	const target = !effects.isBlurOn;
-	blurBtn.setAttribute("aria-pressed", target);
-	blurBtn.textContent = target ? "Blur: On" : "Blur: Off";
-	blurBtn.classList.toggle("active", target);
 	await effects.setBlur(target);
+	updatePreviewVisibility();
+});
+
+window.addEventListener("effects:blur-changed", (event) => {
+	const enabled = !!event.detail?.enabled;
+	blurBtn.setAttribute("aria-pressed", enabled);
+	blurBtn.textContent = enabled ? "Blur: On" : "Blur: Off";
+	blurBtn.classList.toggle("active", enabled);
 	updatePreviewVisibility();
 });
 
@@ -735,13 +746,17 @@ toolManager.registerTool(
 
 toolManager.registerTool(
 	"set_blur",
-	"Enable or disable background blur",
+	"Turn background blur on or off explicitly. You MUST always pass the boolean 'enable' argument to be true or false. You MUST NEVER leave it undefined. You MUST NEVER leave it undefined. You MUST NEVER leave it undefined.",
 	z.object({
-		enable: z.boolean().describe("True to enable blur, false to disable"),
+		enable: z
+			.boolean()
+			.describe(
+				"True to turn background blur ON, false to turn it OFF. This field is REQUIRED and must NEVER be omitted.",
+			),
 	}),
 	async ({ enable }) => {
+		console.log("[set_blur] called with enable =", enable);
 		await effects.setBlur(!!enable);
-		updatePreviewVisibility();
 		return `Blur set to ${enable}`;
 	},
 );
@@ -782,7 +797,14 @@ toolManager.registerTool(
 window.toolManager = toolManager;
 
 // Conversation context for maintaining chat history
-const SYSTEM_PROMPT = `You are a helpful selfie camera assistant. You can take photos, control camera settings like blur, and describe what you see. Use the available tools to fulfill the user's request. If the user asks to take a photo, use the take_photo tool. If they want to blur the background, use set_blur. After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. If you are unsure, ask for clarification, like 'Did you mean to ...?'. IMPORTANT: When you asked a clarification question in the previous turn, and the user answers like "yes/no/okay", treat it as a confirmation and proceed to call the appropriate tool, then give a short verbal confirmation.`;
+const SYSTEM_PROMPT = `You are a helpful selfie camera assistant. 
+You can take photos, control camera settings like blur, and describe what you see. 
+Use the available tools to fulfill the user's request. Always respond to the last user message.
+
+If the user asks to take a photo, use the take_photo tool.
+If they want to blur the background, use the set_blur tool.
+
+After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled/disabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. Keep it minds that users won't say something unrelated. If you are unsure, ask for clarification, like 'Did you mean to ...?'. Don't say you can't do something, instead guessing what the user want to do. IMPORTANT: When you asked a clarification question in the previous turn, and the user answers like "yes/no/okay", treat it as a confirmation and proceed to call the appropriate tool, then give a short verbal confirmation.`;
 
 /** @type {Array<import('ai').ModelMessage>} */
 const chat = [];
@@ -859,6 +881,7 @@ document.addEventListener("voice:command", async (event) => {
 				result.text?.trim() || ackFromToolResults(result.toolResults) || "Done";
 
 			await speechManager.speak(say);
+			lastLlmSpeakEndedAt = Date.now();
 			status.textContent = say;
 		} catch (error) {
 			console.error("LLM Error:", error);

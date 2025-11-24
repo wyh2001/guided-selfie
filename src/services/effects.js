@@ -64,6 +64,11 @@ export class EffectsController {
 			this.statusEl.textContent = this.isBlurOn
 				? "Background blur enabled"
 				: "Background blur disabled";
+			window.dispatchEvent(
+				new CustomEvent("effects:blur-changed", {
+					detail: { enabled: this.isBlurOn },
+				}),
+			);
 		} catch (e) {
 			console.error("Failed to toggle blur", e);
 			this.isBlurOn = !on ? false : this.isBlurOn; // keep consistent

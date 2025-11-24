@@ -14,7 +14,7 @@ export class LLMService {
 	constructor(options = {}) {
 		this.apiKey = options.apiKey || import.meta.env.VITE_OPENROUTER_API_KEY;
 		this.providerName = options.provider || "openrouter";
-		this.modelName = options.model || "google/gemini-2.0-flash-lite-001";
+		this.modelName = options.model || "google/gemini-2.5-flash";
 
 		if (!this.apiKey) {
 			console.warn(
