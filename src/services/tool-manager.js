@@ -3,6 +3,7 @@ import { tool } from "ai";
 export class ToolManager {
 	constructor() {
 		this.tools = new Map();
+		this.lastAction = null; // { name, args, time }
 	}
 
 	/**
@@ -31,7 +32,19 @@ export class ToolManager {
 			tools[name] = tool({
 				description: def.description,
 				parameters: def.parameters,
-				execute: def.handler,
+				execute: async (args) => {
+					try {
+						const result = await def.handler(args);
+						this.lastAction = { name, args, time: Date.now() };
+						return result;
+					} catch (error) {
+						console.error(`Error executing tool via AI SDK: ${name}`, {
+							args,
+							error,
+						});
+						throw error;
+					}
+				},
 			});
 		}
 		return tools;
@@ -67,10 +80,20 @@ export class ToolManager {
 		}
 		console.log(`Executing tool: ${name}`, args);
 		try {
-			return await tool.handler(args);
+			const res = await tool.handler(args);
+			this.lastAction = { name, args, time: Date.now() };
+			return res;
 		} catch (error) {
 			console.error(`Error executing tool ${name}:`, error);
 			throw error;
 		}
+	}
+
+	/**
+	 * Get the most recent tool action
+	 * @returns {null|{name:string,args:any,time:number}}
+	 */
+	getLastAction() {
+		return this.lastAction;
 	}
 }

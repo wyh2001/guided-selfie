@@ -819,6 +819,31 @@ toolManager.registerTool(
 
 window.toolManager = toolManager;
 
+function buildSystemPromptWithState() {
+	const { highContrast, blur } = effects.getState();
+	const isAlbumView = !albumView.hidden;
+	const photoCount = storedPhotos.length;
+
+	const stateLine =
+		`STATE: view=${isAlbumView ? "ALBUM" : "CAMERA"}, ` +
+		`blur=${blur ? "ON" : "OFF"}, ` +
+		`contrast=${highContrast ? "ON" : "OFF"}, ` +
+		`photos=${photoCount}.`;
+
+	// Include the most recent tool
+	let recentActionLine = "RECENT_ACTION: none.";
+	try {
+		const last = toolManager.getLastAction?.();
+		if (last?.name) {
+			const argStr =
+				last.args === undefined ? "" : `(${JSON.stringify(last.args)})`;
+			recentActionLine = `RECENT_ACTION: ${last.name}${argStr}.`;
+		}
+	} catch (_) {}
+
+	return `${SYSTEM_PROMPT}\n\n${stateLine}\n${recentActionLine}`;
+}
+
 // Conversation context for maintaining chat history
 const SYSTEM_PROMPT = `You are a helpful selfie camera assistant. 
 You can take photos, control camera settings like blur, and describe what you see. 
@@ -829,20 +854,8 @@ If they want to blur the background, use the set_blur tool.
 
 After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled/disabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. Keep it minds that users won't say something unrelated. If you are unsure, ask for clarification, like 'Did you mean to ...?'. Don't say you can't do something, instead guessing what the user want to do. IMPORTANT: When you asked a clarification question in the previous turn, and the user answers like "yes/no/okay", treat it as a confirmation and proceed to call the appropriate tool, then give a short verbal confirmation.`;
 
-/** @type {Array<import('ai').ModelMessage>} */
-const chat = [];
-
-/**
- * Trim chat history to prevent context window overflow
- * @param {number} maxTurns - Maximum number of turns to keep (default: 12)
- */
-function trimChat(maxTurns = 12) {
-	if (chat.length > maxTurns * 2) {
-		const keep = chat.slice(-maxTurns * 2);
-		chat.length = 0;
-		chat.push(...keep);
-	}
-}
+// Only last assistant message from previous turn
+let lastAssistantMessage = null;
 
 /**
  * Generate acknowledgment message from tool results
@@ -876,32 +889,29 @@ document.addEventListener("voice:command", async (event) => {
 		const transcript = command.replace("transcript:", "").trim();
 		console.log("Processing transcript with LLM:", transcript);
 
-		// Add user message to conversation history
-		chat.push({ role: "user", content: transcript });
-
 		status.textContent = "Thinking...";
 		isProcessingCommand = true;
 
 		try {
-			const result = await llmService.sendMessages(chat, {
+			// Last assistant (if any) + current user
+			const messages = [];
+			if (lastAssistantMessage) {
+				messages.push({ role: "assistant", content: lastAssistantMessage });
+			}
+			messages.push({ role: "user", content: transcript });
+
+			const result = await llmService.sendMessages(messages, {
 				tools: toolManager.getTools(),
-				system: SYSTEM_PROMPT,
+				system: buildSystemPromptWithState(),
 				maxSteps: 5,
 			});
 
 			console.log("LLM Result:", result);
 
-			// Append LLM messages to conversation history
-			if (result?.response?.messages?.length) {
-				chat.push(...result.response.messages);
-			}
-
-			// Prevent overflow
-			trimChat();
-
 			// Generate verbal response with fallback to tool results
 			const say =
 				result.text?.trim() || ackFromToolResults(result.toolResults) || "Done";
+			lastAssistantMessage = say;
 
 			await speechManager.speak(say);
 			lastLlmSpeakEndedAt = Date.now();
