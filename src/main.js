@@ -786,14 +786,64 @@ toolManager.registerTool(
 
 toolManager.registerTool(
 	"describe_photo",
-	"Describe the current scene using AI",
-	z.object({}),
-	async () => {
-		// Mock implementation
-		const { blob } = await photoService.captureWithBlob();
-		console.log("Captured blob for description:", blob);
-		// TODO: Send to vLLM
-		return "This is a description of the photo (mock).";
+	"Analyze the current camera frame (one still image) with a vision model and return a concise natural-language summary. Inputs: optional 'instruction' string to focus the analysis; omit it for a general brief description. Output: 1-2 short sentences of human-readable text that summarize what is visibly present (e.g., scene, subjects, salient details) and directly address the instruction when provided. The result is plain text (not JSON, not metadata), suitable for voice readout; image bytes are not returned.",
+	z.object({
+		instruction: z
+			.string()
+			.describe(
+				"Optional analysis instruction. If omitted, briefly describe the image. Output must be 1-2 short sentences (under ~45 words), no prefaces, no reasoning or disclaimers, no model mentions; be concrete and visual, avoid speculation. For background safety checks, look for faces/people, IDs/documents with readable text, screens showing personal info, payment cards, addresses/license plates, weapons, drugs/alcohol, explicit content; if none are visible, respond: No obvious sensitive items detected.",
+			)
+			.optional(),
+		source: z
+			.enum(["camera", "album"])
+			.describe(
+				"Image source. 'camera' captures the current camera frame; 'album' uses a stored photo.",
+			)
+			.default("camera"),
+		index: z
+			.number()
+			.int()
+			.min(0)
+			.describe(
+				"Album index when source='album': 0 = newest, 1 = next newest, etc.",
+			)
+			.default(0),
+	}),
+	async ({ instruction, source = "camera", index = 0 }) => {
+		let blob;
+		if (source === "camera") {
+			const res = await photoService.captureWithBlob();
+			blob = res.blob;
+		} else {
+			// source === 'album'
+			const items = await photoStore.getAllPhotos();
+			// Ensure ascending order by createdAt (oldest -> newest)
+			items.sort((a, b) => a.createdAt - b.createdAt);
+			if (!items.length) {
+				return "Album is empty";
+			}
+			const actualIdx = items.length - 1 - index; // 0 => newest
+			if (actualIdx < 0 || actualIdx >= items.length) {
+				throw new Error("Album index out of range");
+			}
+			blob = items[actualIdx].blob;
+		}
+		const prompt = instruction?.trim()
+			? instruction.trim()
+			: "Describe the image in 1 short sentences.";
+		const system = "Answer in at most two short sentences. Be concise.";
+		try {
+			const result = await llmService.sendImageAndText({
+				imageBlob: blob,
+				prompt,
+				system,
+				maxOutputTokens: 30,
+			});
+			return result.text?.trim() || "Done";
+		} catch (e) {
+			console.error("describe_photo tool error:", e);
+			throw e;
+		}
 	},
 );
 
@@ -851,6 +901,10 @@ Use the available tools to fulfill the user's request. Always respond to the las
 
 If the user asks to take a photo, use the take_photo tool.
 If they want to blur the background, use the set_blur tool.
+If they want to change high contrast mode, use the set_contrast tool.
+If they want to open the photo album, use the open_album tool.
+If they want to return to the camera view, use the open_camera tool.
+If they want to know what a photo looks like, including simply describing the photo or looking for specific details, use the describe_photo tool.
 
 After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled/disabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. Keep it minds that users won't say something unrelated. If you are unsure, ask for clarification, like 'Did you mean to ...?'. Don't say you can't do something, instead guessing what the user want to do. IMPORTANT: When you asked a clarification question in the previous turn, and the user answers like "yes/no/okay", treat it as a confirmation and proceed to call the appropriate tool, then give a short verbal confirmation.`;
 
