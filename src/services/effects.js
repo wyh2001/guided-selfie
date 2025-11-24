@@ -43,6 +43,11 @@ export class EffectsController {
 			} else {
 				this.statusEl.textContent = "High contrast mode disabled";
 			}
+			window.dispatchEvent(
+				new CustomEvent("effects:contrast-changed", {
+					detail: { enabled: this.isHighContrastOn },
+				}),
+			);
 		} catch (e) {
 			console.error("Failed to toggle high contrast", e);
 			this.isHighContrastOn = false;

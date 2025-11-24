@@ -627,9 +627,6 @@ captureBtn.addEventListener("click", () => {
 
 contrastBtn.addEventListener("click", async () => {
 	const target = !effects.isHighContrastOn;
-	contrastBtn.setAttribute("aria-pressed", target);
-	contrastBtn.textContent = target ? "Contrast: On" : "Contrast: Off";
-	contrastBtn.classList.toggle("active", target);
 	await effects.setHighContrast(target);
 	updatePreviewVisibility();
 });
@@ -645,6 +642,14 @@ window.addEventListener("effects:blur-changed", (event) => {
 	blurBtn.setAttribute("aria-pressed", enabled);
 	blurBtn.textContent = enabled ? "Blur: On" : "Blur: Off";
 	blurBtn.classList.toggle("active", enabled);
+	updatePreviewVisibility();
+});
+
+window.addEventListener("effects:contrast-changed", (event) => {
+	const enabled = !!event.detail?.enabled;
+	contrastBtn.setAttribute("aria-pressed", enabled);
+	contrastBtn.textContent = enabled ? "Contrast: On" : "Contrast: Off";
+	contrastBtn.classList.toggle("active", enabled);
 	updatePreviewVisibility();
 });
 
@@ -746,7 +751,7 @@ toolManager.registerTool(
 
 toolManager.registerTool(
 	"set_blur",
-	"Turn background blur on or off explicitly. You MUST always pass the boolean 'enable' argument to be true or false. You MUST NEVER leave it undefined. You MUST NEVER leave it undefined. You MUST NEVER leave it undefined.",
+	"Turn background blur on or off explicitly. You MUST always pass the boolean 'enable' argument to be true or false. You MUST NEVER leave it undefined.",
 	z.object({
 		enable: z
 			.boolean()
@@ -756,8 +761,26 @@ toolManager.registerTool(
 	}),
 	async ({ enable }) => {
 		console.log("[set_blur] called with enable =", enable);
-		await effects.setBlur(!!enable);
+		await effects.setBlur(enable);
 		return `Blur set to ${enable}`;
+	},
+);
+
+toolManager.registerTool(
+	"set_contrast",
+	"Turn high contrast mode on or off explicitly. You MUST always pass the boolean 'enable' argument to be true or false. You MUST NEVER leave it undefined.",
+	z.object({
+		enable: z
+			.boolean()
+			.describe(
+				"True to turn high contrast ON, false to turn it OFF. This field is REQUIRED and must NEVER be omitted.",
+			),
+	}),
+	async ({ enable }) => {
+		console.log("[set_contrast] called with enable =", enable);
+		await effects.setHighContrast(enable);
+		updatePreviewVisibility();
+		return `High contrast set to ${enable}`;
 	},
 );
 
