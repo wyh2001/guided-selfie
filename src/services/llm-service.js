@@ -58,4 +58,32 @@ export class LLMService {
 			throw error;
 		}
 	}
+
+	/**
+	 * Send messages with context to the LLM
+	 * @param {Array} messages - Array of CoreMessage objects with conversation history
+	 * @param {Object} options - Additional options
+	 * @param {Object} [options.tools] - Tools definition for AI SDK
+	 * @param {string} [options.system] - System prompt
+	 * @param {number} [options.maxSteps=5] - Max steps for tool execution
+	 * @returns {Promise<import('ai').GenerateTextResult>}
+	 */
+	async sendMessages(messages, options = {}) {
+		const { tools, system, maxSteps = 5 } = options;
+
+		try {
+			const result = await generateText({
+				model: this.provider(this.modelName),
+				messages,
+				system,
+				tools,
+				maxSteps,
+			});
+
+			return result;
+		} catch (error) {
+			console.error("LLMService sendMessages error:", error);
+			throw error;
+		}
+	}
 }

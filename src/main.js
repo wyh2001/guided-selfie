@@ -781,6 +781,46 @@ toolManager.registerTool(
 
 window.toolManager = toolManager;
 
+// Conversation context for maintaining chat history
+const SYSTEM_PROMPT = `You are a helpful selfie camera assistant. You can take photos, control camera settings like blur, and describe what you see. Use the available tools to fulfill the user's request. If the user asks to take a photo, use the take_photo tool. If they want to blur the background, use set_blur. After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. If you are unsure, ask for clarification, like 'Did you mean to ...?'. IMPORTANT: When you asked a clarification question in the previous turn, and the user answers like "yes/no/okay", treat it as a confirmation and proceed to call the appropriate tool, then give a short verbal confirmation.`;
+
+/** @type {Array<import('ai').ModelMessage>} */
+const chat = [];
+
+/**
+ * Trim chat history to prevent context window overflow
+ * @param {number} maxTurns - Maximum number of turns to keep (default: 12)
+ */
+function trimChat(maxTurns = 12) {
+	if (chat.length > maxTurns * 2) {
+		const keep = chat.slice(-maxTurns * 2);
+		chat.length = 0;
+		chat.push(...keep);
+	}
+}
+
+/**
+ * Generate acknowledgment message from tool results
+ * @param {Array} toolResults - Tool execution results
+ * @returns {string} Acknowledgment message
+ */
+function ackFromToolResults(toolResults = []) {
+	if (!toolResults.length) return "";
+	const last = toolResults[toolResults.length - 1];
+	switch (last.toolName) {
+		case "take_photo":
+			return "Photo taken";
+		case "set_blur":
+			return "Background blur updated";
+		case "open_album":
+			return "Album opened";
+		case "open_camera":
+			return "Camera view opened";
+		default:
+			return "Done";
+	}
+}
+
 // Handle voice commands
 document.addEventListener("voice:command", async (event) => {
 	const { command } = event.detail;
@@ -790,27 +830,40 @@ document.addEventListener("voice:command", async (event) => {
 	if (command.startsWith("transcript:")) {
 		const transcript = command.replace("transcript:", "").trim();
 		console.log("Processing transcript with LLM:", transcript);
+
+		// Add user message to conversation history
+		chat.push({ role: "user", content: transcript });
+
 		status.textContent = "Thinking...";
 		isProcessingCommand = true;
 
 		try {
-			const result = await llmService.send(transcript, {
+			const result = await llmService.sendMessages(chat, {
 				tools: toolManager.getTools(),
-				system:
-					"You are a helpful selfie camera assistant. You can take photos, control camera settings like blur, and describe what you see. Use the available tools to fulfill the user's request. If the user asks to take a photo, use the take_photo tool. If they want to blur the background, use set_blur. After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. If you are unsure, ask for clarification, like 'Did you mean to ...?'",
+				system: SYSTEM_PROMPT,
+				maxSteps: 5,
 			});
 
 			console.log("LLM Result:", result);
-			if (result.text) {
-				speechManager.speak(result.text);
-				status.textContent = result.text;
-			} else {
-				status.textContent = "Done";
+
+			// Append LLM messages to conversation history
+			if (result?.response?.messages?.length) {
+				chat.push(...result.response.messages);
 			}
+
+			// Prevent overflow
+			trimChat();
+
+			// Generate verbal response with fallback to tool results
+			const say =
+				result.text?.trim() || ackFromToolResults(result.toolResults) || "Done";
+
+			await speechManager.speak(say);
+			status.textContent = say;
 		} catch (error) {
 			console.error("LLM Error:", error);
 			status.textContent = "Sorry, I encountered an error.";
-			speechManager.speak("Sorry, I encountered an error.");
+			await speechManager.speak("Sorry, I encountered an error.");
 		} finally {
 			isProcessingCommand = false;
 		}
