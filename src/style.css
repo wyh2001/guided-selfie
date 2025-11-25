@@ -156,6 +156,37 @@ button:disabled {
 	background-position: center;
 }
 
+.mode-toggle-button {
+	position: absolute;
+	right: 10%;
+	width: 54px;
+	height: 54px;
+	border-radius: 50%;
+	border: 2px solid #fff;
+	background: #fff;
+	color: #000;
+	font-size: 10px;
+	font-weight: bold;
+	padding: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	line-height: 1.2;
+}
+
+.mode-toggle-button.voice-mode {
+	background: #fff;
+	color: #000;
+	border-color: #000;
+	box-shadow: 0 0 0 5px #ffd400;
+}
+
+.mode-toggle-button:focus-visible {
+	outline: 3px solid #ffd400;
+	outline-offset: 3px;
+}
+
 .bottom-bar button[data-action="retake"],
 .bottom-bar button[data-action="download"] {
 	width: auto;

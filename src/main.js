@@ -86,6 +86,14 @@ app.innerHTML = `
         data-action="capture"
         aria-label="Take photo"
       ></button>
+      <button
+        type="button"
+        class="mode-toggle-button"
+        data-action="toggle-mode"
+        aria-label="Toggle control mode"
+		aria-pressed="false"
+        title="Switch between Simple Mode and Voice Control Mode"
+      >GUIDE</button>
     </div>
 `;
 
@@ -108,10 +116,14 @@ const nextBtn = app.querySelector('[data-action="next-photo"]');
 const backBtn = app.querySelector('[data-action="back-to-camera"]');
 const deleteBtn = app.querySelector('[data-action="delete-photo"]');
 const captureView = app.querySelector(".capture");
+const modeToggleBtn = app.querySelector('[data-action="toggle-mode"]');
 
 const speechControlBar = setupSpeechControlUI(speechManager);
 const contrastBtn = document.getElementById("contrastToggle");
 const blurBtn = document.getElementById("blurToggle");
+
+// false = Simple Mode, true = Voice Control Mode
+let isVoiceControlMode = false;
 
 albumPhoto.addEventListener("error", () => {
 	console.warn("Failed to load image:", albumPhoto.src);
@@ -553,6 +565,11 @@ function guideUser(evals, faceCount) {
 		return;
 	}
 
+	// In Voice Control Mode, disable auto-guidance (guidance can still be called)
+	if (isVoiceControlMode) {
+		return;
+	}
+
 	// If user is currently speaking/listening, or LLM is processing, DO NOT interrupt with guidance
 	if (
 		speechManager.isListening() ||
@@ -655,6 +672,22 @@ window.addEventListener("effects:contrast-changed", (event) => {
 
 albumBtn.addEventListener("click", () => {
 	initializeAlbumView(0);
+});
+
+modeToggleBtn.addEventListener("click", () => {
+	isVoiceControlMode = !isVoiceControlMode;
+
+	if (isVoiceControlMode) {
+		modeToggleBtn.textContent = "VOICE";
+		modeToggleBtn.classList.add("voice-mode");
+		modeToggleBtn.setAttribute("aria-pressed", "true");
+		speechManager.enableVADMode();
+	} else {
+		modeToggleBtn.textContent = "GUIDE";
+		modeToggleBtn.classList.remove("voice-mode");
+		modeToggleBtn.setAttribute("aria-pressed", "false");
+		speechManager.disableVADMode();
+	}
 });
 
 backBtn.addEventListener("click", () => {

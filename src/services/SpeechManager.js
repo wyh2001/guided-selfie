@@ -3,13 +3,17 @@
  * Unified interface for speech recognition and text-to-speech.
  * This is the main entry point for all speech functionality.
  */
+import { HarkService } from './hark-service.js';
 import { SpeechRecognitionService } from './SpeechRecognitionService.js';
 import { TextToSpeechService } from './TextToSpeechService.js';
+import { VADService } from './vad-service.js';
 
 export class SpeechManager {
   constructor() {
     this.recognition = new SpeechRecognitionService();
     this.tts = new TextToSpeechService();
+    this.vad = new VADService();
+    this.hark = new HarkService();
     this.commandHandlers = new Map();
     
     this._currentSpeakToken = null; // Make sure only latest speak resumes listening
@@ -18,6 +22,69 @@ export class SpeechManager {
     
     // Set up command processing
     this.setupCommandProcessing();
+
+    // Use VAD to control recognition
+    this.vad.onSpeechStart = async () => {
+      // If TTS is speaking, cancel it
+      if (this.shouldIgnoreSpeechStart()) {
+        return;
+      }
+      // Start recognition if not already active
+      if (!this.isListening()) {
+        try {
+          await this.recognition.start();
+        } catch (e) {
+          console.error('Failed to start recognition on VAD speechStart:', e);
+        }
+      }
+    };
+
+    this.vad.onSpeechEnd = async () => {
+      if (this.isListening()) {
+        try {
+          await this.recognition.stop();
+        } catch (e) {
+          console.error('Failed to stop recognition on VAD speechEnd:', e);
+        }
+      }
+    };
+
+    // Use Hark fallback with the same logic
+    this.hark.onSpeechStart = async () => {
+      if (this.shouldIgnoreSpeechStart()) {
+        return;
+      }
+      if (!this.isListening()) {
+        try {
+          await this.recognition.start();
+        } catch (e) {
+          console.error('Failed to start recognition on Hark speechStart:', e);
+        }
+      }
+    };
+    this.hark.onSpeechEnd = async () => {
+      if (this.isListening()) {
+        try {
+          await this.recognition.stop();
+        } catch (e) {
+          console.error('Failed to stop recognition on Hark speechEnd:', e);
+        }
+      }
+    };
+
+    // For debugging
+    this.recognition.onEnd = () => {
+      if (this._wantListening && this.isVADModeActive()) {
+        console.info('Recognition session ended; VAD/Hark will restart on next speech');
+      }
+    };
+  }
+
+  /**
+   * Check if VAD or Hark mode is currently active
+   */
+  isVADModeActive() {
+    return this.vad.isActive() || this.hark.isActive();
   }
 
   setupCommandProcessing() {
@@ -291,6 +358,47 @@ export class SpeechManager {
     }
   }
 
+  /**
+   * Enable VAD-driven listening
+   */
+  async enableVADMode() {
+    this._wantListening = true;
+    // Ensure fallback is not running
+    try { await this.hark.stop(); } catch {}
+    try {
+      await this.vad.start();
+      console.info('Voice detection: VAD enabled');
+      // Ensure hark stays stopped
+      try { await this.hark.stop(); } catch {}
+    } catch (e) {
+      console.warn('VAD failed, falling back to Hark', e);
+      try { await this.vad.stop(); } catch {}
+      await this.hark.start();
+      console.info('Voice detection: Hark fallback enabled');
+    }
+  }
+
+  /**
+   * Disable VAD-driven listening
+   */
+  async disableVADMode() {
+    this._wantListening = false;
+    // Stop both detectors
+    try { await this.vad.stop(); } catch {}
+    try { await this.hark.stop(); } catch {}
+    await this.stopListening();
+  }
+
+  /**
+   * Whether we should ignore speech-start events (e.g., during TTS or disabled)
+   */
+  shouldIgnoreSpeechStart() {
+    if (!this._wantListening) return true;
+    if (this.isSpeakingNow()) return true;
+    if (this._currentSpeakToken) return true;
+    return false;
+  }
+ 
   /**
    * Internal method to stop listening
    * @param {Object} options - { markSuspended: boolean }
