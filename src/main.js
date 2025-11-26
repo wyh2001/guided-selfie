@@ -862,6 +862,13 @@ toolManager.registerTool(
 			.default(0),
 	}),
 	async ({ instruction, source = "camera", index = 0 }) => {
+		// transitional message
+		const preMsg =
+			source === "camera"
+				? "OK, let me take a look."
+				: "OK, let me check this photo.";
+		await speechManager.speak(preMsg);
+
 		let blob;
 		if (source === "camera") {
 			const res = await photoService.captureWithBlob();
