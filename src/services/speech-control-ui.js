@@ -21,6 +21,9 @@ export function setupSpeechControlUI(manager) {
     <button id="blurToggle" class="speech-control-btn" aria-pressed="false" title="Toggle background blur">
       Blur: Off
     </button>
+	<button id="tokenBtn" class="speech-control-btn" aria-pressed="false" title="Set user key">
+	  Key: None
+	</button>
   `;
 
 	// Insert at the top of the app
@@ -32,6 +35,7 @@ export function setupSpeechControlUI(manager) {
 	// Get UI elements
 	const micBtn = document.getElementById("voiceMicBtn");
 	const ttsToggle = document.getElementById("ttsToggle");
+	const tokenBtn = document.getElementById("tokenBtn");
 
 	// Sound effects
 	const startSound = new Audio("/sounds/ding_start.mp3");
@@ -66,6 +70,21 @@ export function setupSpeechControlUI(manager) {
 		updateTTSButton(enabled);
 	});
 
+	// Key button
+	tokenBtn.addEventListener("click", () => {
+		const input = window.prompt("Enter user key (leave empty to clear):", "");
+		if (input === null) return;
+		const value = String(input).trim();
+		try {
+			if (value) {
+				localStorage.setItem("user_key", value);
+			} else {
+				localStorage.removeItem("user_key");
+			}
+		} catch (_) {}
+		updateTokenButton();
+	});
+
 	// Helper functions
 	function updateTTSButton(enabled) {
 		ttsToggle.setAttribute("aria-pressed", String(enabled));
@@ -90,6 +109,7 @@ export function setupSpeechControlUI(manager) {
 	// Initialize
 	updateTTSButton(manager.isTTSEnabled());
 	updateVoiceButton(manager.isListening());
+	updateTokenButton();
 
 	// Check if speech features are supported
 	const support = manager.isSupported();
@@ -110,4 +130,14 @@ export function setupSpeechControlUI(manager) {
 
 	// Return the container so it can be controlled from outside
 	return container;
+
+	function updateTokenButton() {
+		let exists = false;
+		try {
+			exists = !!localStorage.getItem("user_key");
+		} catch (_) {}
+		tokenBtn.setAttribute("aria-pressed", String(exists));
+		tokenBtn.textContent = exists ? "Key: Set" : "Key: None";
+		tokenBtn.classList.toggle("active", exists);
+	}
 }

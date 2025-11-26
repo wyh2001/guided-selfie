@@ -32,6 +32,25 @@ import { SelfieSegmentation } from "./services/selfie-segmentation.js";
 import { setupSpeechControlUI } from "./services/speech-control-ui.js";
 import { ToolManager } from "./services/tool-manager.js";
 
+// ?key=... -> localStorage('user_key'), then clean URL
+// Temporary solution, should be done in more secure way
+(function applyMagicKeyFromURL() {
+	try {
+		const url = new URL(window.location.href);
+		const rawKey = url.searchParams.get("key");
+		const v = rawKey?.trim();
+		if (v) {
+			try {
+				localStorage.setItem("user_key", v);
+			} catch (_) {}
+			url.searchParams.delete("key");
+			const qs = url.searchParams.toString();
+			const cleanPath = url.pathname + (qs ? `?${qs}` : "") + url.hash;
+			window.history.replaceState({}, "", cleanPath);
+		}
+	} catch (_) {}
+})();
+
 const app = document.querySelector("#app");
 const photoService = new PhotoCapture();
 const photoStore = new PhotoStore();
