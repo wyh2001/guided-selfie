@@ -1,1 +1,1 @@
-export { config, default } from "../../../openai/index.js";
+export { config, default } from "../../../index.js";
