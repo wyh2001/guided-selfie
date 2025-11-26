@@ -15,8 +15,8 @@ export class LLMService {
 
 		// Backends
 		const origin = typeof window !== "undefined" ? window.location.origin : "";
-		this.openaiBaseURL = `${origin}/api/openai`;
-		this.vllmBaseURL = `${origin}/api/vllm`;
+		this.openaiBaseURL = `${origin}/api/openai/v1`;
+		this.vllmBaseURL = `${origin}/api/vllm/v1`;
 		this.vllmModel = options.vllmModel || "Qwen/Qwen3-VL-2B-Instruct-GGUF";
 
 		this.provider = createOpenAICompatible({
