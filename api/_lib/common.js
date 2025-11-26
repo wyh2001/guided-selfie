@@ -1,3 +1,10 @@
+/*
+AI usage disclosure:
+
+Heavily(70%) assisted by Copilot.
+Some functions like enforceRateLimit are helped by asking ChatGPT.
+
+*/
 import { get } from "@vercel/edge-config";
 import { kv } from "@vercel/kv";
 

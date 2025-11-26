@@ -1,3 +1,10 @@
+/*
+AI usage disclosure:
+
+Heavily(70%) assisted by Copilot.
+The lock design pattern is suggested by ChatGPT.
+
+*/
 export const config = { runtime: "edge" };
 
 import { gateway } from "../_lib/common.js";
