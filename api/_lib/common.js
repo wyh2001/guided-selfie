@@ -21,13 +21,13 @@ export async function getAllowedModels() {
 }
 
 export async function getMaxTemperature() {
-	const v = await get("MAX_TEMPERATURE");
-	return typeof v === "number" ? v : 1.0;
+	const v = Number(await get("MAX_TEMPERATURE"));
+	return Number.isFinite(v) ? v : 1.0;
 }
 
 export async function getMaxTokens() {
-	const v = await get("MAX_TOKENS");
-	return typeof v === "number" ? v : 2048;
+	const v = Number(await get("MAX_TOKENS"));
+	return Number.isFinite(v) ? v : 2048;
 }
 
 export async function getVllmBaseURL() {
@@ -121,27 +121,27 @@ export async function enforceRateLimit(dim) {
 				if (typeof remain === "number" && remain > 0)
 					retryAfter = Math.max(1, remain);
 			} catch {}
-			throw rateLimitError("Too many requests", retryAfter, key);
+			throw rateLimitError("Too many requests", retryAfter);
 		}
 	}
 }
 
-export function rateLimitError(message, retryAfter = 10, key) {
-	return new Response(
-		JSON.stringify({ error: "rate_limited", message, retryAfter, key }),
-		{
-			status: 429,
-			headers: {
-				"content-type": "application/json; charset=utf-8",
-				"retry-after": String(retryAfter),
-			},
+export function rateLimitError(message, retryAfter = 10) {
+	const payload = { error: "rate_limited", message, retryAfter };
+	return new Response(JSON.stringify(payload), {
+		status: 429,
+		headers: {
+			"content-type": "application/json; charset=utf-8",
+			"retry-after": String(retryAfter),
 		},
-	);
+	});
 }
 
 export async function acquireSessionLock(sessionId, ttlSec = 300) {
-	const ok = await kv.setnx(`lock:session:${sessionId}`, 1);
-	if (ok) await kv.expire(`lock:session:${sessionId}`, ttlSec);
+	const ok = await kv.set(`lock:session:${sessionId}`, 1, {
+		nx: true,
+		ex: ttlSec,
+	});
 	return !!ok;
 }
 

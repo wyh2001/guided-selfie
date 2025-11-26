@@ -151,6 +151,7 @@ export default async function handler(req) {
 			},
 		});
 
+		responded = true;
 		return new Response(stream, {
 			status: upstream.status,
 			headers: respHeaders,
