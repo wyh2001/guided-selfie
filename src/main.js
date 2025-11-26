@@ -971,7 +971,6 @@ let lastAssistantMessage = null;
 function ackFromToolResults(toolResults = []) {
 	if (!toolResults.length) return "";
 	const last = toolResults[toolResults.length - 1];
-	console.log("[ackFromToolResults] last =", last);
 	switch (last.toolName) {
 		case "take_photo":
 			return "Photo taken";
@@ -982,10 +981,8 @@ function ackFromToolResults(toolResults = []) {
 		case "open_camera":
 			return "Camera view opened";
 		case "describe_photo": {
-			const r = last.result;
-			console.log("[ackFromToolResults] describe_photo result =", r, typeof r);
+			const r = last.output;
 			if (typeof r === "string") return r;
-			if (r?.text) return r.text;
 			return "Done";
 		}
 		default:
