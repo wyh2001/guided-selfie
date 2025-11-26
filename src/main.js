@@ -838,16 +838,12 @@ toolManager.registerTool(
 
 toolManager.registerTool(
 	"describe_photo",
-	`Analyze the current camera frame or a stored photo with a vision model. Use cases:
-	1. General description: Describe what's in the image (people, scene, objects).
-	2. Background safety check: When user asks to check background for sensitive/private items, use instruction to look for: other people/faces, ID cards/documents, screens with personal info, credit cards, addresses, license plates, weapons, drugs/alcohol, or explicit content. Report what's visible or confirm nothing sensitive is detected.
-	3. Specific queries: Answer user questions about details in the image.
-	Output: 1-2 short sentences suitable for voice readout.`,
+	"Analyze the current camera frame (one still image) with a vision model and return a concise natural-language summary. Inputs: optional 'instruction' string to focus the analysis; omit it for a general brief description. Output: 1-2 short sentences of human-readable text that summarize what is visibly present (e.g., scene, subjects, salient details) and directly address the instruction when provided. The result is plain text (not JSON, not metadata), suitable for voice readout; image bytes are not returned.",
 	z.object({
 		instruction: z
 			.string()
 			.describe(
-				"Analysis instruction to focus the description. Examples: 'Describe the background', 'Check if there are any sensitive items in the background like documents, screens, or other people', 'What objects are visible behind me?'. If omitted, give a brief general description.",
+				"Optional analysis instruction. If omitted, briefly describe the image. Output must be 1-2 short sentences (under ~45 words), no prefaces, no reasoning or disclaimers, no model mentions; be concrete and visual, avoid speculation. For background safety checks, look for faces/people, IDs/documents with readable text, screens showing personal info, payment cards, addresses/license plates, weapons, drugs/alcohol, explicit content; if none are visible, respond: No obvious sensitive items detected.",
 			)
 			.optional(),
 		source: z
@@ -968,9 +964,8 @@ If they want to change high contrast mode, use the set_contrast tool.
 If they want to open the photo album, use the open_album tool.
 If they want to return to the camera view, use the open_camera tool.
 If they want to know what a photo looks like, including simply describing the photo or looking for specific details, use the describe_photo tool.
-If the user asks to check the background for sensitive/private items (e.g., "is my background safe?", "anything private behind me?", "check what's in the background"), use describe_photo with an instruction like "Check the background for sensitive items such as other people, documents, screens with personal info, ID cards, or anything private."
 
-After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled/disabled'). For describe_photo, just relay the description result directly without adding extra commentary. The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. Keep in mind that users won't say something unrelated. If you are unsure, ask for clarification, like 'Did you mean to ...?'. Don't say you can't do something, instead guessing what the user want to do. IMPORTANT: When you asked a clarification question in the previous turn, and the user answers like "yes/no/okay", treat it as a confirmation and proceed to call the appropriate tool, then give a short verbal confirmation.`;
+After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled/disabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. Keep it minds that users won't say something unrelated. If you are unsure, ask for clarification, like 'Did you mean to ...?'. Don't say you can't do something, instead guessing what the user want to do. IMPORTANT: When you asked a clarification question in the previous turn, and the user answers like "yes/no/okay", treat it as a confirmation and proceed to call the appropriate tool, then give a short verbal confirmation.`;
 
 // Only last assistant message from previous turn
 let lastAssistantMessage = null;
