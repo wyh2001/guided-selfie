@@ -75,6 +75,14 @@ export default async function handler(req) {
 	const vllmKey = process.env.VLLM_API_KEY;
 	if (vllmKey) upstreamHeaders.authorization = `Bearer ${vllmKey}`;
 
+	// Cloudflare Access headers
+	const cfAccessId = process.env.CF_ACCESS_CLIENT_ID;
+	const cfAccessSecret = process.env.CF_ACCESS_CLIENT_SECRET;
+	if (cfAccessId && cfAccessSecret) {
+		upstreamHeaders["CF-Access-Client-Id"] = cfAccessId;
+		upstreamHeaders["CF-Access-Client-Secret"] = cfAccessSecret;
+	}
+
 	let responded = false;
 	try {
 		const upstream = await fetch(upstreamUrl, {
