@@ -1,8 +1,4 @@
-/*
-This is a temporary solution!!! Most of it will be moved to a backend later.
-*/
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText } from "ai";
 
 export class LLMService {
@@ -13,38 +9,25 @@ export class LLMService {
 	 * @param {string} [options.model] - Model ID
 	 */
 	constructor(options = {}) {
-		this.apiKey = options.apiKey || import.meta.env.VITE_OPENROUTER_API_KEY;
-		this.providerName = options.provider || "openrouter";
+		this.userKey = options.userKey || null;
+		this.sessionId = options.sessionId || null;
 		this.modelName = options.model || "google/gemini-2.5-flash";
 
-		// VLLM
-		this.vllmBaseURL =
-			options.vllmBaseURL || import.meta.env.VITE_VLLM_BASE_URL;
-		this.vllmApiKey = options.vllmApiKey || import.meta.env.VITE_VLLM_API_KEY;
+		// Backends
+		this.openaiBaseURL = "/api/openai";
+		this.vllmBaseURL = "/api/vllm";
 		this.vllmModel = options.vllmModel || import.meta.env.VITE_VLLM_MODEL;
 
-		if (!this.apiKey) {
-			console.warn(
-				"LLMService: API key is missing. Set VITE_OPENROUTER_API_KEY or pass it in options.",
-			);
-		}
-
-		if (this.providerName === "openrouter") {
-			this.provider = createOpenRouter({
-				apiKey: this.apiKey,
-			});
-		} else {
-			throw new Error(`Provider ${this.providerName} is not supported.`);
-		}
+		this.provider = createOpenAICompatible({
+			name: "gateway-openai",
+			baseURL: this.openaiBaseURL,
+		});
 
 		// Initialize for VLLM if configured
-		if (this.vllmBaseURL) {
-			this.vllmProvider = createOpenAICompatible({
-				name: "llamacpp",
-				baseURL: this.vllmBaseURL,
-				...(this.vllmApiKey ? { apiKey: this.vllmApiKey } : {}),
-			});
-		}
+		this.vllmProvider = createOpenAICompatible({
+			name: "gateway-vllm",
+			baseURL: this.vllmBaseURL,
+		});
 	}
 
 	/**
@@ -66,6 +49,7 @@ export class LLMService {
 				system,
 				tools,
 				maxSteps,
+				headers: this._authHeaders(),
 			});
 
 			return result;
@@ -94,6 +78,7 @@ export class LLMService {
 				system,
 				tools,
 				maxSteps,
+				headers: this._authHeaders(),
 			});
 
 			return result;
@@ -129,12 +114,6 @@ export class LLMService {
 			resizeQuality = 0.6,
 			maxOutputTokens,
 		} = params;
-
-		if (!this.vllmProvider) {
-			throw new Error(
-				"VLLM provider not configured. Set VITE_VLLM_BASE_URL or pass vllmBaseURL in constructor.",
-			);
-		}
 
 		if (!imageBlob && !imageUrl) {
 			throw new Error("sendImageAndText requires imageBlob or imageUrl");
@@ -218,11 +197,58 @@ export class LLMService {
 				],
 				system,
 				maxOutputTokens,
+				headers: this._authHeaders(),
 			});
 			return result;
 		} catch (error) {
 			console.error("LLMService sendImageAndText error:", error);
 			throw error;
 		}
+	}
+
+	_authHeaders() {
+		const headers = {};
+		const key =
+			this.userKey ||
+			(typeof localStorage !== "undefined"
+				? localStorage.getItem("user_key")
+				: null);
+		if (key) headers.Authorization = `Bearer ${key}`;
+		const ids = this._ids();
+		if (ids.deviceId) headers["x-device-id"] = ids.deviceId;
+		if (ids.sessionId) headers["x-session-id"] = ids.sessionId;
+		return headers;
+	}
+
+	_ids() {
+		let deviceId = null;
+		let sessionId = this.sessionId || null;
+		if (typeof localStorage !== "undefined") {
+			deviceId = localStorage.getItem("device_id");
+			if (!deviceId) {
+				deviceId = this._uuid();
+				try {
+					localStorage.setItem("device_id", deviceId);
+				} catch {}
+			}
+		}
+		if (!sessionId) {
+			sessionId = this._uuid();
+		}
+		return { deviceId, sessionId };
+	}
+
+	_uuid() {
+		if (typeof crypto !== "undefined" && crypto.randomUUID)
+			return crypto.randomUUID();
+		return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+			const r = (Math.random() * 16) | 0;
+			const v = c === "x" ? r : (r & 0x3) | 0x8;
+			return v.toString(16);
+		});
+	}
+
+	setSessionId(id) {
+		this.sessionId = id || null;
 	}
 }
