@@ -980,6 +980,8 @@ function ackFromToolResults(toolResults = []) {
 			return "Album opened";
 		case "open_camera":
 			return "Camera view opened";
+		case "describe_photo":
+			return typeof last.result === "string" ? last.result : "Done";
 		default:
 			return "Done";
 	}
