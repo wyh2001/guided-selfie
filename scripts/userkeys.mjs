@@ -15,12 +15,6 @@ program
 	.description("Create a new user key (prints plaintext token once)")
 	.requiredOption("--userId <id>", "User ID")
 	.addOption(
-		new Option("--plan <plan>")
-			.choices(["free", "pro", "enterprise"])
-			.default("free"),
-	)
-	.option("--limit <num>", "Monthly limit (tokens/messages)", "50000")
-	.addOption(
 		new Option("--status <status>")
 			.choices(["active", "disabled"])
 			.default("active"),
@@ -29,19 +23,12 @@ program
 	.action(async (opts) => {
 		requireEnv();
 		const userId = opts.userId;
-		const plan = String(opts.plan || "free");
 		const status = opts.status === "disabled" ? "disabled" : "active";
-		const monthlyLimit = Number.parseInt(String(opts.limit ?? "50000"), 10);
-		if (!Number.isFinite(monthlyLimit) || monthlyLimit <= 0) {
-			fail("limit must be a positive integer");
-		}
 		const token = opts.token || genToken(32);
 		const tokenId = tokenToId(token);
 		const key = `userkey:${tokenId}`;
 		const record = {
 			userId,
-			plan,
-			monthlyLimit,
 			status,
 			createdAt: new Date().toISOString(),
 		};
@@ -164,8 +151,6 @@ program
 		const now = new Date().toISOString();
 		const newRec = {
 			userId: oldRec.userId,
-			plan: oldRec.plan,
-			monthlyLimit: oldRec.monthlyLimit,
 			status: "active",
 			createdAt: now,
 		};
@@ -190,25 +175,16 @@ program
 
 program
 	.command("update")
-	.description("Update fields of a user key (plan/limit/status)")
+	.description("Update fields of a user key (status)")
 	.option("--token <token>", "Plaintext token")
 	.option("--id <tokenId>", "Hashed token id (sha256 base64url)")
 	.addOption(new Option("--status <status>").choices(["active", "disabled"]))
-	.addOption(new Option("--plan <plan>").choices(["free", "pro", "enterprise"]))
-	.option("--limit <num>", "Monthly limit (tokens/messages)")
 	.action(async (opts) => {
 		requireEnv();
 		const tokenId = resolveTokenIdArg(opts);
 		const key = `userkey:${tokenId}`;
 		const rec = await kv.get(key);
 		if (!rec) fail("Not found");
-		if (opts.plan) rec.plan = String(opts.plan);
-		if (opts.limit !== undefined) {
-			const lim = Number.parseInt(String(opts.limit), 10);
-			if (!Number.isFinite(lim) || lim <= 0)
-				fail("limit must be a positive integer");
-			rec.monthlyLimit = lim;
-		}
 		if (opts.status) {
 			rec.status = opts.status;
 			if (opts.status === "disabled") rec.disabledAt = new Date().toISOString();
