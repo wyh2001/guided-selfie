@@ -142,7 +142,21 @@ const contrastBtn = document.getElementById("contrastToggle");
 const blurBtn = document.getElementById("blurToggle");
 
 // false = Simple Mode, true = Voice Control Mode
-let isVoiceControlMode = false;
+// Enable Voice Control Mode if user_key is set
+let isVoiceControlMode = (() => {
+	try {
+		return !!localStorage.getItem("user_key");
+	} catch (_) {
+		return false;
+	}
+})();
+
+if (isVoiceControlMode) {
+	modeToggleBtn.textContent = "VOICE";
+	modeToggleBtn.classList.add("voice-mode");
+	modeToggleBtn.setAttribute("aria-pressed", "true");
+	speechManager.enableVADMode();
+}
 
 albumPhoto.addEventListener("error", () => {
 	console.warn("Failed to load image:", albumPhoto.src);
