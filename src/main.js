@@ -188,6 +188,8 @@ const captureCtx = {
 };
 
 const defaultPlaceholderText = placeholder.textContent;
+let isGuidingActive = false;
+let stopGuidingCallback = null;
 
 const setVisible = (element, visible) => {
 	if (!element) {
@@ -279,6 +281,10 @@ const setState = (state, overrideMessage) => {
 	const view = stateView[state];
 	if (!view) {
 		return;
+	}
+
+	if (state !== State.READY) {
+		stopGuidanceIfAny();
 	}
 
 	switch (state) {
@@ -592,6 +598,68 @@ let lastGuidanceState = null;
 const GUIDANCE_INTERVAL = 4000;
 let isProcessingCommand = false;
 let lastLlmSpeakEndedAt = 0;
+const GUIDANCE_STOP_PATTERNS = [
+	/\bstop (?:guide|guiding|guidance)\b/i,
+	/\bcancel (?:guide|guiding|guidance)\b/i,
+	/\bend (?:guide|guidance)\b/i,
+];
+let guidanceVoiceStopRegistered = false;
+let guidanceForcedListening = false;
+
+const guidanceVoiceStopHandler = async () => {
+	if (!isGuidingActive) {
+		return;
+	}
+	status.textContent = "Guidance stopped";
+	stopGuidanceIfAny();
+	try {
+		await speechManager.speak("Stopping guidance.");
+	} catch (err) {
+		console.warn("Failed to speak guidance stop ack", err);
+	}
+};
+
+function enableGuidanceVoiceStop() {
+	if (guidanceVoiceStopRegistered) {
+		return;
+	}
+	GUIDANCE_STOP_PATTERNS.forEach((pattern) => {
+		speechManager.registerCommand(pattern, guidanceVoiceStopHandler);
+	});
+	guidanceVoiceStopRegistered = true;
+
+	if (!speechManager.isVADModeActive() && !speechManager.isListening()) {
+		guidanceForcedListening = true;
+		speechManager.startListening().catch((err) => {
+			console.warn("Failed to start listening for guidance stop hotword", err);
+		});
+	}
+}
+
+function disableGuidanceVoiceStop() {
+	if (!guidanceVoiceStopRegistered) {
+		return;
+	}
+	GUIDANCE_STOP_PATTERNS.forEach((pattern) => {
+		speechManager.unregisterCommand(pattern);
+	});
+	guidanceVoiceStopRegistered = false;
+
+	if (guidanceForcedListening) {
+		guidanceForcedListening = false;
+		speechManager.stopListening().catch((err) => {
+			console.warn("Failed to stop listening after guidance", err);
+		});
+	}
+}
+
+function stopGuidanceIfAny() {
+	if (isGuidingActive && typeof stopGuidingCallback === "function") {
+		try {
+			stopGuidingCallback();
+		} catch (_) {}
+	}
+}
 
 function guideUser(evals, faceCount) {
 	if (evals.length === 0) {
@@ -672,6 +740,7 @@ function guideUser(evals, faceCount) {
 }
 
 captureBtn.addEventListener("click", () => {
+	stopGuidanceIfAny();
 	sharedPerformCapture(captureCtx);
 });
 
@@ -704,10 +773,12 @@ window.addEventListener("effects:contrast-changed", (event) => {
 });
 
 albumBtn.addEventListener("click", () => {
+	stopGuidanceIfAny();
 	initializeAlbumView(0);
 });
 
 modeToggleBtn.addEventListener("click", () => {
+	stopGuidanceIfAny();
 	isVoiceControlMode = !isVoiceControlMode;
 
 	if (isVoiceControlMode) {
@@ -940,6 +1011,135 @@ toolManager.registerTool(
 	},
 );
 
+toolManager.registerTool(
+	"start_guide",
+	"Start guiding the user to position their face correctly for a selfie. This tool will continuously provide voice instructions until the user's face is perfectly centered and at the correct distance. The tool blocks until the perfect position is achieved.",
+	z.object({}),
+	async () => {
+		const GUIDE_INTERVAL = 3000;
+		const CHECK_INTERVAL = 300;
+
+		if (isGuidingActive) {
+			return "Guide is already running";
+		}
+		isGuidingActive = true;
+		enableGuidanceVoiceStop();
+
+		let lastGuideTime = 0;
+		let lastGuideMessage = null;
+
+		await speechManager.speak(
+			"Let me help you position for a perfect selfie. If you want to stop at any time, just say, stop.",
+		);
+
+		return new Promise((resolve) => {
+			const finishGuidance = (message) => {
+				if (!isGuidingActive) return;
+				isGuidingActive = false;
+				stopGuidingCallback = null;
+				disableGuidanceVoiceStop();
+				resolve(message);
+			};
+
+			stopGuidingCallback = () => {
+				finishGuidance("Guidance stopped");
+			};
+
+			const checkPosition = () => {
+				if (!isGuidingActive) return;
+
+				const videoWidth = video.videoWidth;
+				const videoHeight = video.videoHeight;
+
+				if (!videoWidth || !videoHeight) {
+					setTimeout(checkPosition, CHECK_INTERVAL);
+					return;
+				}
+
+				const detections = faceService.detections;
+				if (!detections || detections.length === 0) {
+					const now = Date.now();
+					if (
+						now - lastGuideTime >= GUIDE_INTERVAL &&
+						lastGuideMessage !== "no_face"
+					) {
+						speechManager.speak(
+							"I can't detect your face yet. Try holding the phone at arm's length in front of you.",
+						);
+						lastGuideTime = now;
+						lastGuideMessage = "no_face";
+					}
+					setTimeout(checkPosition, CHECK_INTERVAL);
+					return;
+				}
+
+				const evals = evaluateFacePosition(detections, videoWidth, videoHeight);
+				if (evals.length === 0) {
+					setTimeout(checkPosition, CHECK_INTERVAL);
+					return;
+				}
+
+				const evaluation = evals[0];
+				const positions = evaluation.positions;
+				const distance = evaluation.distance;
+
+				if (
+					positions.includes(facePosition.CENTERED) &&
+					distance === faceDistance.NORMAL
+				) {
+					speechManager.speak(
+						"Perfect! Your face is centered and at a good distance. Ready to take a photo.",
+					);
+					finishGuidance("User is now in perfect position for a selfie");
+					return;
+				}
+
+				const now = Date.now();
+				if (now - lastGuideTime >= GUIDE_INTERVAL) {
+					let message = "";
+
+					if (distance === faceDistance.CLOSE) {
+						message = "Too close. Move the phone further away from your face.";
+					} else if (distance === faceDistance.FAR) {
+						message = "Too far. Bring the phone closer to your face.";
+					} else if (positions.includes(facePosition.TOP)) {
+						message = "Point the phone upward a little.";
+					} else if (positions.includes(facePosition.BOTTOM)) {
+						message = "Point the phone downward a little.";
+					} else if (positions.includes(facePosition.LEFT)) {
+						message = "Turn the phone slightly to your left.";
+					} else if (positions.includes(facePosition.RIGHT)) {
+						message = "Turn the phone slightly to your right.";
+					}
+
+					if (message && message !== lastGuideMessage) {
+						speechManager.speak(message);
+						lastGuideTime = now;
+						lastGuideMessage = message;
+					}
+				}
+
+				setTimeout(checkPosition, CHECK_INTERVAL);
+			};
+
+			checkPosition();
+		});
+	},
+);
+
+toolManager.registerTool(
+	"stop_guide",
+	"Stop the ongoing guidance if it is running.",
+	z.object({}),
+	async () => {
+		if (isGuidingActive && typeof stopGuidingCallback === "function") {
+			stopGuidingCallback();
+			return "Guidance stopped";
+		}
+		return "Guidance was not running";
+	},
+);
+
 window.toolManager = toolManager;
 
 function buildSystemPromptWithState() {
@@ -978,6 +1178,8 @@ If they want to change high contrast mode, use the set_contrast tool.
 If they want to open the photo album, use the open_album tool.
 If they want to return to the camera view, use the open_camera tool.
 If they want to know what a photo looks like, including simply describing the photo or looking for specific details, use the describe_photo tool.
+
+When the user simply say they want a photo: if the recent action is start_guide (or the user just finished guidance), take_photo immediately. Otherwise ask: "Do you want me to guide you first, or take the photo now?" Then follow their answer—start_guide then take_photo, or just take_photo. Keep the question short.
 
 After executing a tool, you MUST provide a short verbal confirmation to the user (e.g., 'Photo taken', 'Blur enabled/disabled'). The input is transcribed speech from the user, so it may contain some recognition errors. Try to interpret their intent as best as you can. Keep it minds that users won't say something unrelated. If you are unsure, ask for clarification, like 'Did you mean to ...?'. Don't say you can't do something, instead guessing what the user want to do. IMPORTANT: When you asked a clarification question in the previous turn, and the user answers like "yes/no/okay", treat it as a confirmation and proceed to call the appropriate tool, then give a short verbal confirmation.`;
 

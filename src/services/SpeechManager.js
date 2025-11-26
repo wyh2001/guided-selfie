@@ -237,6 +237,14 @@ export class SpeechManager {
   }
 
   /**
+   * Unregister a previously registered command handler
+   * @param {string|RegExp} pattern - The exact pattern object/string used in registerCommand
+   */
+  unregisterCommand(pattern) {
+    this.commandHandlers.delete(pattern);
+  }
+
+  /**
    * Process a recognized transcript and execute matching commands
    * @param {string} transcript - The recognized speech text
    */
