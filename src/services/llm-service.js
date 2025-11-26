@@ -16,7 +16,7 @@ export class LLMService {
 		// Backends
 		this.openaiBaseURL = "/api/openai";
 		this.vllmBaseURL = "/api/vllm";
-		this.vllmModel = options.vllmModel || import.meta.env.VITE_VLLM_MODEL;
+		this.vllmModel = options.vllmModel || "Qwen/Qwen3-VL-2B-Instruct-GGUF";
 
 		this.provider = createOpenAICompatible({
 			name: "gateway-openai",
