@@ -937,7 +937,7 @@ toolManager.registerTool(
 			? instruction.trim()
 			: "Describe the image in 1 short sentence.";
 		const system =
-			"Answer in at most two short sentences. If the prompt asks a specific question, answer it directly using what is visible; otherwise briefly describe the image. Be concise.";
+			"Answer in at most two short sentences. If the prompt asks a specific question, answer it directly using what is visible; otherwise briefly describe the image. Be concise. Stay grounded in the visible content and avoid judgments or speculation.";
 		try {
 			const result = await llmService.sendImageAndText({
 				imageBlob: blob,
