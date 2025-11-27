@@ -21,6 +21,7 @@ This will be updated over time when the project evolves.
 */
 import "./style.css";
 import { z } from "zod";
+import { fetchBackendStatus } from "./services/backend-config.js";
 import { performCapture as sharedPerformCapture } from "./services/capture-flow.js";
 import { EffectsController } from "./services/effects.js";
 import { FaceDetect } from "./services/face-detect.js";
@@ -31,7 +32,6 @@ import { SpeechManager } from "./services/SpeechManager.js";
 import { SelfieSegmentation } from "./services/selfie-segmentation.js";
 import { setupSpeechControlUI } from "./services/speech-control-ui.js";
 import { ToolManager } from "./services/tool-manager.js";
-import { fetchBackendStatus } from "./services/backend-config.js";
 
 // ?key=... -> localStorage('user_key'), then clean URL
 // Temporary solution, should be done in more secure way
@@ -935,8 +935,9 @@ toolManager.registerTool(
 		}
 		const prompt = instruction?.trim()
 			? instruction.trim()
-			: "Describe the image in 1 short sentences.";
-		const system = "Answer in at most two short sentences. Be concise.";
+			: "Describe the image in 1 short sentence.";
+		const system =
+			"Answer in at most two short sentences. If the prompt asks a specific question, answer it directly using what is visible; otherwise briefly describe the image. Be concise.";
 		try {
 			const result = await llmService.sendImageAndText({
 				imageBlob: blob,
