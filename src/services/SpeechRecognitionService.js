@@ -44,7 +44,7 @@ export class SpeechRecognitionService {
     this.recognition = new SpeechRecognition();
     this.recognition.interimResults = false;
     this.recognition.maxAlternatives = 1;
-    this.recognition.continuous = true;
+    this.recognition.continuous = false;
     this.recognition.lang = this.language;
     
     this._setupHandlers();
@@ -56,7 +56,10 @@ export class SpeechRecognitionService {
 
     rec.onresult = (event) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript.toLowerCase().trim();
+        const res = event.results[i];
+        if (!res?.isFinal) continue; // Only handle final results
+        const transcript = res[0].transcript.toLowerCase().trim();
+        if (!transcript) continue;
         this.onResult?.(transcript);
       }
     };
