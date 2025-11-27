@@ -1164,7 +1164,10 @@ function ackFromToolResults(toolResults = []) {
 			return "Background blur updated";
 		case "start_guide": {
 			const r = last.output;
-			if (typeof r === "string") return r;
+			if (typeof r === "string") {
+				if (r === "Done") return "";
+				return r;
+			}
 			return "Guidance started";
 		}
 		// TBD
@@ -1223,6 +1226,19 @@ document.addEventListener("voice:command", async (event) => {
 			// avoid interrupting tool execution flow
 			if (hasToolResults || !result.textStream) {
 				const text = result.text?.trim();
+				const ackIsDoneOnly = ack === "Done" && !text;
+				if (ackIsDoneOnly) {
+					lastAssistantMessage = text || "";
+					status.textContent = "";
+					return;
+				}
+				const ackIsEmpty = hasToolResults && !ack && !text;
+				if (ackIsEmpty) {
+					lastAssistantMessage = text || "";
+					status.textContent = "";
+					return;
+				}
+
 				const say = ack && ack !== "Done" ? ack : text || ack || "Done";
 				lastAssistantMessage = say;
 
