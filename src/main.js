@@ -598,60 +598,6 @@ let lastGuidanceState = null;
 const GUIDANCE_INTERVAL = 4000;
 let isProcessingCommand = false;
 let lastLlmSpeakEndedAt = 0;
-const GUIDANCE_STOP_PATTERNS = [
-	/\bstop (?:guide|guiding|guidance)\b/i,
-	/\bcancel (?:guide|guiding|guidance)\b/i,
-	/\bend (?:guide|guidance)\b/i,
-];
-let guidanceVoiceStopRegistered = false;
-let guidanceForcedListening = false;
-
-const guidanceVoiceStopHandler = async () => {
-	if (!isGuidingActive) {
-		return;
-	}
-	status.textContent = "Guidance stopped";
-	stopGuidanceIfAny();
-	try {
-		await speechManager.speak("Stopping guidance.");
-	} catch (err) {
-		console.warn("Failed to speak guidance stop ack", err);
-	}
-};
-
-function enableGuidanceVoiceStop() {
-	if (guidanceVoiceStopRegistered) {
-		return;
-	}
-	GUIDANCE_STOP_PATTERNS.forEach((pattern) => {
-		speechManager.registerCommand(pattern, guidanceVoiceStopHandler);
-	});
-	guidanceVoiceStopRegistered = true;
-
-	if (!speechManager.isVADModeActive() && !speechManager.isListening()) {
-		guidanceForcedListening = true;
-		speechManager.startListening().catch((err) => {
-			console.warn("Failed to start listening for guidance stop hotword", err);
-		});
-	}
-}
-
-function disableGuidanceVoiceStop() {
-	if (!guidanceVoiceStopRegistered) {
-		return;
-	}
-	GUIDANCE_STOP_PATTERNS.forEach((pattern) => {
-		speechManager.unregisterCommand(pattern);
-	});
-	guidanceVoiceStopRegistered = false;
-
-	if (guidanceForcedListening) {
-		guidanceForcedListening = false;
-		speechManager.stopListening().catch((err) => {
-			console.warn("Failed to stop listening after guidance", err);
-		});
-	}
-}
 
 function stopGuidanceIfAny() {
 	if (isGuidingActive && typeof stopGuidingCallback === "function") {
@@ -1016,29 +962,50 @@ toolManager.registerTool(
 	"Start guiding the user to position their face correctly for a selfie. This tool will continuously provide voice instructions until the user's face is perfectly centered and at the correct distance. The tool blocks until the perfect position is achieved.",
 	z.object({}),
 	async () => {
-		const GUIDE_INTERVAL = 3000;
+		const GUIDE_INTERVAL = 4000;
 		const CHECK_INTERVAL = 300;
 
 		if (isGuidingActive) {
 			return "Guide is already running";
 		}
 		isGuidingActive = true;
-		enableGuidanceVoiceStop();
+
+		// Temporarily disable VAD
+		const wasVADActive = speechManager.isVADModeActive();
+		if (wasVADActive) {
+			try {
+				await speechManager.disableVADMode();
+			} catch (_) {}
+		}
 
 		let lastGuideTime = 0;
-		let lastGuideMessage = null;
 
-		await speechManager.speak(
-			"Let me help you position for a perfect selfie. If you want to stop at any time, just say, stop.",
-		);
+		await speechManager.speak("Let me help you position for a perfect selfie.");
 
 		return new Promise((resolve) => {
-			const finishGuidance = (message) => {
+			const canSpeakNow = () => {
+				if (speechManager.isSpeakingNow() || isProcessingCommand) {
+					return false;
+				}
+				const now = Date.now();
+				if (now - lastLlmSpeakEndedAt < 500) {
+					return false;
+				}
+				return true;
+			};
+			const finishGuidance = async (message) => {
 				if (!isGuidingActive) return;
 				isGuidingActive = false;
 				stopGuidingCallback = null;
-				disableGuidanceVoiceStop();
-				resolve(message);
+				try {
+					await speechManager.speak(message);
+				} catch (_) {}
+				if (wasVADActive) {
+					try {
+						await speechManager.enableVADMode();
+					} catch (_) {}
+				}
+				resolve("Done");
 			};
 
 			stopGuidingCallback = () => {
@@ -1059,15 +1026,13 @@ toolManager.registerTool(
 				const detections = faceService.detections;
 				if (!detections || detections.length === 0) {
 					const now = Date.now();
-					if (
-						now - lastGuideTime >= GUIDE_INTERVAL &&
-						lastGuideMessage !== "no_face"
-					) {
-						speechManager.speak(
-							"I can't detect your face yet. Try holding the phone at arm's length in front of you.",
-						);
-						lastGuideTime = now;
-						lastGuideMessage = "no_face";
+					if (now - lastGuideTime >= GUIDE_INTERVAL) {
+						if (canSpeakNow()) {
+							speechManager.speak(
+								"I can't detect your face yet. Try holding the phone at arm's length in front of you.",
+							);
+							lastGuideTime = now;
+						}
 					}
 					setTimeout(checkPosition, CHECK_INTERVAL);
 					return;
@@ -1087,10 +1052,10 @@ toolManager.registerTool(
 					positions.includes(facePosition.CENTERED) &&
 					distance === faceDistance.NORMAL
 				) {
-					speechManager.speak(
-						"Perfect! Your face is centered and at a good distance. Ready to take a photo.",
-					);
-					finishGuidance("User is now in perfect position for a selfie");
+					const ending =
+						"Perfect! Your face is centered and at a good distance. Ready to take a photo. " +
+						"I will stop guidance. Let me know if you want to take a photo right now, or need further assistance.";
+					finishGuidance(ending);
 					return;
 				}
 
@@ -1098,10 +1063,11 @@ toolManager.registerTool(
 				if (now - lastGuideTime >= GUIDE_INTERVAL) {
 					let message = "";
 
+					// Longer instructions
 					if (distance === faceDistance.CLOSE) {
-						message = "Too close. Move the phone further away from your face.";
+						message = "Too close. Move the phone further away.";
 					} else if (distance === faceDistance.FAR) {
-						message = "Too far. Bring the phone closer to your face.";
+						message = "Too far. Bring the phone closer.";
 					} else if (positions.includes(facePosition.TOP)) {
 						message = "Point the phone upward a little.";
 					} else if (positions.includes(facePosition.BOTTOM)) {
@@ -1112,10 +1078,11 @@ toolManager.registerTool(
 						message = "Turn the phone slightly to your right.";
 					}
 
-					if (message && message !== lastGuideMessage) {
-						speechManager.speak(message);
-						lastGuideTime = now;
-						lastGuideMessage = message;
+					if (message) {
+						if (canSpeakNow()) {
+							speechManager.speak(message);
+							lastGuideTime = now;
+						}
 					}
 				}
 
@@ -1199,6 +1166,17 @@ function ackFromToolResults(toolResults = []) {
 			return "Photo taken";
 		case "set_blur":
 			return "Background blur updated";
+		case "start_guide": {
+			const r = last.output;
+			if (typeof r === "string") return r;
+			return "Done";
+		}
+		// TBD
+		case "stop_guide": {
+			const r = last.output;
+			if (typeof r === "string") return r;
+			return "Done";
+		}
 		case "open_album":
 			return "Album opened";
 		case "open_camera":
@@ -1242,9 +1220,9 @@ document.addEventListener("voice:command", async (event) => {
 
 			console.log("LLM Result:", result);
 
-			// Generate verbal response with fallback to tool results
-			const say =
-				result.text?.trim() || ackFromToolResults(result.toolResults) || "Done";
+			const ack = ackFromToolResults(result.toolResults);
+			const text = result.text?.trim();
+			const say = ack && ack !== "Done" ? ack : text || ack || "Done";
 			lastAssistantMessage = say;
 
 			await speechManager.speak(say);
