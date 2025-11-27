@@ -3,11 +3,21 @@
  * Independent service for handling speech recognition.
  * Manages its own state and can be called from anywhere.
  */
+
+const STOP_TIMEOUT_MS = 4000;
+
 export class SpeechRecognitionService {
   constructor() {
     this.recognition = null;
     this.isListening = false;
     this.language = 'en-US';
+    
+    // idle | starting | listening | stopping
+    this.status = "idle";
+
+    // Concurrency control
+    this._startingPromise = null;
+    this._stoppingPromise = null;
     
     // Callbacks that can be set from outside
     this.onResult = null;
@@ -16,6 +26,11 @@ export class SpeechRecognitionService {
     this.onEnd = null;
     
     this.init();
+  }
+
+  _setStatus(s) {
+    this.status = s;
+    this.isListening = (s === "listening");
   }
 
   init() {
@@ -32,85 +47,149 @@ export class SpeechRecognitionService {
     this.recognition.continuous = true;
     this.recognition.lang = this.language;
     
-    this.setupHandlers();
+    this._setupHandlers();
   }
 
-  setupHandlers() {
-    if (!this.recognition) return;
+  _setupHandlers() {
+    const rec = this.recognition;
+    if (!rec) return;
 
-    this.recognition.onresult = (event) => {
-      // Handle continuous mode
+    rec.onresult = (event) => {
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript.toLowerCase().trim();
-        if (this.onResult) {
-          this.onResult(transcript);
-        }
+        this.onResult?.(transcript);
       }
     };
 
-    this.recognition.onerror = (event) => {
-      console.error('Speech recognition error:', event.error);
-      this.isListening = false;
-      if (this.onError) {
-        this.onError(event.error);
-      }
+    rec.onstart = () => {
+      this._setStatus("listening");
+      this.onStart?.();
     };
 
-    this.recognition.onstart = () => {
-      this.isListening = true;
-      if (this.onStart) {
-        this.onStart();
-      }
+    rec.onend = () => {
+      this._setStatus("idle");
+      this.onEnd?.();
     };
 
-    this.recognition.onend = () => {
-      this.isListening = false;
-      if (this.onEnd) {
-        this.onEnd();
-      }
+    rec.onerror = (event) => {
+      console.error("Speech recognition error:", event.error);
+      if (this.status !== "idle") this._setStatus("idle");
+      this.onError?.(event?.error ?? event);
     };
   }
 
   /**
    * Start listening for speech input
+   * @returns {Promise<boolean>} true if started successfully
    */
-  start() {
-    if (!this.recognition) {
-      console.error('Speech recognition not available');
-      return false;
-    }
-    
-    if (this.isListening) {
-      console.warn('Already listening');
-      return false;
-    }
-    
-    try {
-      this.recognition.start();
-      return true;
-    } catch (error) {
-      console.error('Failed to start recognition:', error);
-      return false;
-    }
+  async start() {
+    const rec = this.recognition;
+    if (!rec) return false;
+
+    // Already listening
+    if (this.status === "listening") return true;
+
+    if (this._startingPromise) return this._startingPromise;
+
+    // Wait for ongoing stop
+    if (this._stoppingPromise) await this._stoppingPromise;
+
+    this._setStatus("starting");
+
+    this._startingPromise = new Promise((resolve) => {
+      const cleanup = () => {
+        rec.removeEventListener("start", onStart);
+        rec.removeEventListener("error", onError);
+        this._startingPromise = null;
+      };
+
+      const onStart = () => { cleanup(); resolve(true); };
+      const onError = () => { cleanup(); resolve(false); };
+
+      rec.addEventListener("start", onStart, { once: true });
+      rec.addEventListener("error", onError, { once: true });
+
+      try {
+        rec.start();
+      } catch (e) {
+        console.error("Failed to start recognition:", e);
+        cleanup();
+        this._setStatus("idle");
+        resolve(false);
+      }
+    });
+
+    const ok = await this._startingPromise;
+    if (!ok) this._setStatus("idle");
+    return ok;
   }
 
   /**
    * Stop listening for speech input
+   * Has 4s timeout to force abort if no end event
+   * @returns {Promise<boolean>} true if stopped successfully
    */
-  stop() {
-    if (!this.recognition) return false;
-    
-    if (!this.isListening) {
-      return false;
+  async stop() {
+    const rec = this.recognition;
+    if (!rec) return false;
+
+    // Already stopped
+    if (this.status === "idle") return true;
+
+    // Merge concurrent stop calls
+    if (this._stoppingPromise) return this._stoppingPromise;
+
+    // If starting, abort first
+    if (this._startingPromise && this.status === "starting") {
+      try { rec.abort(); } catch {}
+      try { await this._startingPromise; } catch {}
     }
-    
-    try {
-      this.recognition.stop();
-      return true;
-    } catch (error) {
-      console.error('Failed to stop recognition:', error);
-      return false;
-    }
+
+    this._setStatus("stopping");
+
+    this._stoppingPromise = new Promise((resolve) => {
+      let settled = false;
+
+      const cleanup = () => {
+        settled = true;
+        clearTimeout(guard);
+        rec.removeEventListener("end", onEnd);
+        rec.removeEventListener("error", onError);
+        this._stoppingPromise = null;
+      };
+
+      const finish = (ok) => {
+        if (settled) return;
+        cleanup();
+        this._setStatus("idle");
+        resolve(ok);
+      };
+
+      const onEnd = () => finish(true);
+      const onError = () => finish(true); // Treat as stopped
+
+      rec.addEventListener("end", onEnd, { once: true });
+      rec.addEventListener("error", onError, { once: true });
+
+      const guard = setTimeout(() => {
+        try { rec.abort(); } catch {}
+      }, STOP_TIMEOUT_MS);
+
+      try {
+        if (this.status === "listening" || this.status === "stopping") {
+          rec.stop();
+        } else {
+          rec.abort();
+        }
+      } catch (e) {
+        console.warn("Failed to stop recognition:", e);
+        cleanup();
+        this._setStatus("idle");
+        resolve(false);
+      }
+    });
+
+    return await this._stoppingPromise;
   }
 
   /**
@@ -126,12 +205,17 @@ export class SpeechRecognitionService {
 
   /**
    * Set the language for recognition
+   * Auto-restarts if currently listening
    * @param {string} lang - Language code (e.g., 'en-US', 'es-ES')
    */
   setLanguage(lang) {
     this.language = lang;
     if (this.recognition) {
+      const shouldRestart = this.isActive();
       this.recognition.lang = lang;
+      if (shouldRestart) {
+        this.stop().then(() => this.start());
+      }
     }
   }
 

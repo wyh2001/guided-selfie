@@ -23,21 +23,39 @@ export class TextToSpeechService {
   /**
    * Speak the given text (only if TTS is enabled)
    * @param {string} text - Text to speak
-   * @param {Object} options - Optional parameters (rate, pitch, volume)
+   * @param {Object} options - Optional parameters (rate, pitch, volume, onEnd, onError)
+   * @returns {boolean} - Whether speech was initiated
+   * @deprecated Use speakAsync for better control flow
    */
   speak(text, options = {}) {
+    // Compatibility wrapper
+    this.speakAsync(text, options).then(
+      (success) => {
+        if (success && typeof options.onEnd === 'function') {
+          options.onEnd();
+        }
+      },
+      (error) => {
+        if (typeof options.onError === 'function') {
+          options.onError(error);
+        }
+      }
+    );
+    
+    // Return if speak
+    return this.enabled && !!this.synthesis && !!text?.trim();
+  }
+
+  /**
+   * Speak the given text asynchronously (Promise-based)
+   * @param {string} text - Text to speak
+   * @param {Object} options - Optional parameters (rate, pitch, volume)
+   * @returns {Promise<boolean>} - Resolves to true if speech completed, false if not started or failed
+   */
+  speakAsync(text, options = {}) {
     // Only speak if enabled
-    if (!this.enabled) {
-      return false;
-    }
-    
-    if (!this.synthesis) {
-      console.error('Speech synthesis not available');
-      return false;
-    }
-    
-    if (!text || text.trim() === '') {
-      return false;
+    if (!this.enabled || !this.synthesis || !text?.trim()) {
+      return Promise.resolve(false);
     }
     
     // Cancel any ongoing speech
@@ -54,9 +72,21 @@ export class TextToSpeechService {
     utterance.rate = options.rate ?? this.rate;
     utterance.pitch = options.pitch ?? this.pitch;
     utterance.volume = options.volume ?? this.volume;
-    
-    this.synthesis.speak(utterance);
-    return true;
+
+    return new Promise((resolve) => {
+      utterance.onend = () => resolve(true);
+      utterance.onerror = (error) => {
+        console.warn('Speech synthesis error:', error);
+        resolve(false);
+      };
+
+    try {
+      this.synthesis.speak(utterance);
+    } catch (error) {
+        console.error('Failed to initiate speech:', error);
+        resolve(false);
+      }
+    });
   }
 
   /**
@@ -65,12 +95,7 @@ export class TextToSpeechService {
    */
   setEnabled(enabled) {
     const wasEnabled = this.enabled;
-    this.enabled = enabled;
-    
-    // If disabling, cancel any ongoing speech
-    if (!enabled && wasEnabled) {
-      this.cancel();
-    }
+    this.enabled = !!enabled;
     
     // Notify listeners of state change
     if (this.onEnabledChange && wasEnabled !== enabled) {
