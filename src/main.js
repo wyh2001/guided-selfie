@@ -31,6 +31,7 @@ import { SpeechManager } from "./services/SpeechManager.js";
 import { SelfieSegmentation } from "./services/selfie-segmentation.js";
 import { setupSpeechControlUI } from "./services/speech-control-ui.js";
 import { ToolManager } from "./services/tool-manager.js";
+import { fetchBackendStatus } from "./services/backend-config.js";
 
 // ?key=... -> localStorage('user_key'), then clean URL
 // Temporary solution, should be done in more secure way
@@ -49,6 +50,20 @@ import { ToolManager } from "./services/tool-manager.js";
 			window.history.replaceState({}, "", cleanPath);
 		}
 	} catch (_) {}
+})();
+
+// Warm backend to avoid cold-start delays
+(async function warmBackendStatusIfKey() {
+	try {
+		const key = localStorage.getItem("user_key");
+		if (!key) return;
+		const status = await fetchBackendStatus();
+		if (!status?.enabled) {
+			console.warn("[backend-status] Unexpected status", status);
+		}
+	} catch (error) {
+		console.warn("[backend-status] Warm-up failed", error);
+	}
 })();
 
 const app = document.querySelector("#app");
