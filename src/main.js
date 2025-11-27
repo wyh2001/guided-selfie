@@ -1228,6 +1228,11 @@ document.addEventListener("voice:command", async (event) => {
 			await speechManager.speak(say);
 			lastLlmSpeakEndedAt = Date.now();
 			status.textContent = say;
+			try {
+				if (/[?]\s*$/.test(say)) {
+					speechManager.expectShortReply(4500);
+				}
+			} catch (_) {}
 		} catch (error) {
 			console.error("LLM Error:", error);
 			status.textContent = "Sorry, I encountered an error.";

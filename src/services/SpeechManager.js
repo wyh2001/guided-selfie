@@ -15,6 +15,8 @@ export class SpeechManager {
     this.vad = new VADService();
     this.hark = new HarkService();
     this.commandHandlers = new Map();
+    this._expectReplyTimer = null;
+    this._expectReplyDeadline = 0;
     
     this._currentSpeakToken = null; // Make sure only latest speak resumes listening
     this._suspendedByTTS = false;
@@ -40,6 +42,9 @@ export class SpeechManager {
     };
 
     this.vad.onSpeechEnd = async () => {
+      if (this._isExpectReplyActive()) {
+        return;
+      }
       if (this.isListening()) {
         try {
           await this.recognition.stop();
@@ -63,6 +68,9 @@ export class SpeechManager {
       }
     };
     this.hark.onSpeechEnd = async () => {
+      if (this._isExpectReplyActive()) {
+        return;
+      }
       if (this.isListening()) {
         try {
           await this.recognition.stop();
@@ -249,6 +257,10 @@ export class SpeechManager {
    * @param {string} transcript - The recognized speech text
    */
   processCommand(transcript) {
+    if (this._isExpectReplyActive()) {
+      this._clearExpectReplyMode();
+      try { this.recognition.stop(); } catch (_) {}
+    }
     const text = transcript.toLowerCase().trim();
     let commandMatched = false;
     
@@ -428,5 +440,28 @@ export class SpeechManager {
         this._suspendedByTTS = true;
       }
     }
+  }
+
+  expectShortReply(timeoutMs = 4500) {
+    if (timeoutMs <= 0) return;
+    this._clearExpectReplyMode();
+    this._expectReplyDeadline = Date.now() + timeoutMs;
+    this._expectReplyTimer = setTimeout(() => {
+      this._clearExpectReplyMode();
+      try { this.recognition.stop(); } catch (_) {}
+    }, timeoutMs);
+    this._startListeningInternal();
+  }
+
+  _isExpectReplyActive() {
+    return this._expectReplyTimer != null && Date.now() <= this._expectReplyDeadline;
+  }
+
+  _clearExpectReplyMode() {
+    if (this._expectReplyTimer) {
+      clearTimeout(this._expectReplyTimer);
+      this._expectReplyTimer = null;
+    }
+    this._expectReplyDeadline = 0;
   }
 }
