@@ -22,6 +22,7 @@ export class SpeechManager {
     this._suspendedByTTS = false;
     this._wantListening = false; // Whether user wants listening active
     this._speakQueue = Promise.resolve();
+    this._lastTranscript = { text: '', at: 0 };
     // Set up command processing
     this.setupCommandProcessing();
 
@@ -281,7 +282,19 @@ export class SpeechManager {
       this._clearExpectReplyMode();
       try { this.recognition.stop(); } catch (_) {}
     }
+    // Ignore echo of TTS
+    if (this.isSpeakingNow() || this._currentSpeakToken) {
+      return;
+    }
     const text = transcript.toLowerCase().trim();
+    const now = Date.now();
+    if (
+      text === this._lastTranscript.text &&
+      now - this._lastTranscript.at < 1200
+    ) {
+      return;
+    }
+    this._lastTranscript = { text, at: now };
     let commandMatched = false;
     
     // Try to match against registered command handlers
@@ -445,12 +458,6 @@ export class SpeechManager {
    * @private
    */
   async _stopListeningInternal({ markSuspended }) {
-    if (!this.isListening()) {
-      if (markSuspended) {
-        this._suspendedByTTS = true;
-      }
-      return;
-    }
     try {
       await this.recognition.stop();
     } catch (error) {
