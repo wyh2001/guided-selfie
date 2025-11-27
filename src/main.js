@@ -984,11 +984,7 @@ toolManager.registerTool(
 
 		return new Promise((resolve) => {
 			const canSpeakNow = () => {
-				if (speechManager.isSpeakingNow() || isProcessingCommand) {
-					return false;
-				}
-				const now = Date.now();
-				if (now - lastLlmSpeakEndedAt < 500) {
+				if (speechManager.isSpeakingNow()) {
 					return false;
 				}
 				return true;
