@@ -1165,13 +1165,13 @@ function ackFromToolResults(toolResults = []) {
 		case "start_guide": {
 			const r = last.output;
 			if (typeof r === "string") return r;
-			return "Done";
+			return "Guidance started";
 		}
 		// TBD
 		case "stop_guide": {
 			const r = last.output;
 			if (typeof r === "string") return r;
-			return "Done";
+			return "Guidance stopped";
 		}
 		case "open_album":
 			return "Album opened";
