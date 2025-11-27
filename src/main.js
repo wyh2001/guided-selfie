@@ -1208,7 +1208,7 @@ document.addEventListener("voice:command", async (event) => {
 			}
 			messages.push({ role: "user", content: transcript });
 
-			const result = await llmService.sendMessages(messages, {
+			const result = await llmService.sendMessagesStream(messages, {
 				tools: toolManager.getTools(),
 				system: buildSystemPromptWithState(),
 				maxSteps: 5,
@@ -1217,11 +1217,72 @@ document.addEventListener("voice:command", async (event) => {
 			console.log("LLM Result:", result);
 
 			const ack = ackFromToolResults(result.toolResults);
-			const text = result.text?.trim();
-			const say = ack && ack !== "Done" ? ack : text || ack || "Done";
+			const hasToolResults =
+				Array.isArray(result.toolResults) && result.toolResults.length > 0;
+
+			// avoid interrupting tool execution flow
+			if (hasToolResults || !result.textStream) {
+				const text = result.text?.trim();
+				const say = ack && ack !== "Done" ? ack : text || ack || "Done";
+				lastAssistantMessage = say;
+
+				await speechManager.speak(say);
+				lastLlmSpeakEndedAt = Date.now();
+				status.textContent = say;
+				try {
+					if (/[?]\s*$/.test(say)) {
+						speechManager.expectShortReply(4500);
+					}
+				} catch (_) {}
+				return;
+			}
+
+			// sentence by sentence, then decide whether to expect a reply
+			let fullText = "";
+			let buffer = "";
+			let lastSpeakPromise = Promise.resolve(false);
+			const sentenceEndChars = /[.!?]/;
+
+			const flushCompleteSentences = () => {
+				while (buffer.length > 0) {
+					let endIndex = -1;
+					for (let i = 0; i < buffer.length; i++) {
+						if (!sentenceEndChars.test(buffer[i])) {
+							continue;
+						}
+						const nextChar = buffer[i + 1];
+						if (!nextChar || /\s/.test(nextChar)) {
+							endIndex = i + 1;
+							break;
+						}
+					}
+					if (endIndex === -1) {
+						return;
+					}
+					const sentence = buffer.slice(0, endIndex).trim();
+					buffer = buffer.slice(endIndex).replace(/^\s+/, "");
+					if (sentence) {
+						lastSpeakPromise = speechManager.speakQueued(sentence);
+					}
+				}
+			};
+
+			for await (const delta of result.textStream) {
+				if (!delta) continue;
+				fullText += delta;
+				buffer += delta;
+				flushCompleteSentences();
+			}
+
+			const remaining = buffer.trim();
+			if (remaining) {
+				lastSpeakPromise = speechManager.speakQueued(remaining);
+			}
+
+			const say = fullText.trim() || ack || "Done";
 			lastAssistantMessage = say;
 
-			await speechManager.speak(say);
+			await lastSpeakPromise;
 			lastLlmSpeakEndedAt = Date.now();
 			status.textContent = say;
 			try {

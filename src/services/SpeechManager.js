@@ -21,7 +21,7 @@ export class SpeechManager {
     this._currentSpeakToken = null; // Make sure only latest speak resumes listening
     this._suspendedByTTS = false;
     this._wantListening = false; // Whether user wants listening active
-    
+    this._speakQueue = Promise.resolve();
     // Set up command processing
     this.setupCommandProcessing();
 
@@ -139,6 +139,26 @@ export class SpeechManager {
     }
 
     return success;
+  }
+
+  /**
+   * Queue speech to avoid overlapping segments
+   * @param {string} text - Text to speak
+   * @param {Object} options - Optional speech parameters
+   * @returns {Promise<boolean>} - Resolves after this queued speech completes
+   */
+  speakQueued(text, options = {}) {
+    const run = async () => {
+      try {
+        return await this.speak(text, options);
+      } catch (error) {
+        console.error('Queued speak failed:', error);
+        return false;
+      }
+    };
+
+    this._speakQueue = this._speakQueue.catch(() => {}).then(run);
+    return this._speakQueue;
   }
 
   /**

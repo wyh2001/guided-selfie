@@ -90,6 +90,35 @@ export class LLMService {
 	}
 
 	/**
+	 * Send messages and stream back partial text
+	 * @param {Array} messages - Array of CoreMessage objects with conversation history
+	 * @param {Object} options - Additional options
+	 * @param {Object} [options.tools] - Tools definition for AI SDK
+	 * @param {string} [options.system] - System prompt
+	 * @param {number} [options.maxSteps=5] - Max steps for tool execution
+	 * @returns {Promise<import('ai').GenerateTextResult>}
+	 */
+	async sendMessagesStream(messages, options = {}) {
+		const { tools, system, maxSteps = 5 } = options;
+
+		try {
+			const result = await generateText({
+				model: this.provider(this.modelName),
+				messages,
+				system,
+				tools,
+				maxSteps,
+				headers: this._authHeaders(),
+			});
+
+			return result;
+		} catch (error) {
+			console.error("LLMService sendMessagesStream error:", error);
+			throw error;
+		}
+	}
+
+	/**
 	 * Send image + text to an OpenAI-compatible VLLM endpoint (e.g. llama.cpp server)
 	 * @param {Object} params
 	 * @param {string} [params.prompt] - Optional user text
