@@ -188,6 +188,13 @@ const hasUserKey = (() => {
 })();
 
 preview.disabled = !hasUserKey;
+albumPhotoBtn.disabled = !hasUserKey;
+
+window.addEventListener("keyupdate", () => {
+	const has = !!localStorage.getItem("user_key");
+	preview.disabled = !has;
+	albumPhotoBtn.disabled = !has;
+});
 
 preview.addEventListener("click", async () => {
 	if (isProcessingCommand) return;
@@ -210,7 +217,6 @@ preview.addEventListener("click", async () => {
 	}
 });
 
-albumPhotoBtn.disabled = !hasUserKey;
 albumPhotoBtn.addEventListener("click", async () => {
 	if (isProcessingCommand) return;
 	isProcessingCommand = true;
