@@ -49,6 +49,13 @@ body {
 	justify-items: center;
 	position: relative;
 	overflow: hidden;
+	border: none;
+	background: none;
+	padding: 0;
+	width: 100%;
+	text-align: inherit;
+	font: inherit;
+	color: inherit;
 }
 
 .actions {

@@ -80,12 +80,12 @@ speechManager.enableTTS(true);
 
 app.innerHTML = `
   <main class="capture">
-    <section class="preview" role="region" aria-label="Camera preview">
+    <button type="button" class="preview" aria-label="Camera preview">
       <div class="video-placeholder">Awaiting camera…</div>
       <video autoplay playsinline hidden></video>
       <canvas id="segmentation-canvas" hidden aria-label="High contrast video preview"></canvas>
       <img alt="snapshot" hidden />
-    </section>
+    </button>
     <section class="actions">
     </section>
     <p class="status" hidden></p>
@@ -174,6 +174,37 @@ if (isVoiceControlMode) {
 
 albumPhoto.addEventListener("error", () => {
 	console.warn("Failed to load image:", albumPhoto.src);
+});
+
+const hasUserKey = (() => {
+	try {
+		return !!localStorage.getItem("user_key");
+	} catch (_) {
+		return false;
+	}
+})();
+
+preview.disabled = !hasUserKey;
+
+preview.addEventListener("click", async () => {
+	if (isProcessingCommand) return;
+	isProcessingCommand = true;
+	status.textContent = "Analyzing frame...";
+
+	try {
+		const description = await toolManager.executeTool("describe_photo", {
+			source: "camera",
+		});
+		await speechManager.speak(description);
+		status.textContent = description;
+	} catch (error) {
+		console.error("Failed to describe frame:", error);
+		const errorMsg = "Failed to describe frame";
+		await speechManager.speak(errorMsg);
+		status.textContent = errorMsg;
+	} finally {
+		isProcessingCommand = false;
+	}
 });
 
 const faceBoxElements = [];
@@ -588,6 +619,18 @@ function updatePreviewAriaLabel(faceCount, evals) {
 				label += `, face on ${positionParts.join(" and ")}`;
 			}
 		}
+	}
+
+	const hasUserKey = (() => {
+		try {
+			return !!localStorage.getItem("user_key");
+		} catch (_) {
+			return false;
+		}
+	})();
+
+	if (hasUserKey) {
+		label += ". Click to describe current frame";
 	}
 
 	preview.setAttribute("aria-label", label);
