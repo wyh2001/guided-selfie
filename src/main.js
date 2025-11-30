@@ -378,6 +378,7 @@ const setState = (state, overrideMessage) => {
 		case State.ALBUM_EMPTY:
 			currentPhotoIndex = 0;
 			setAlbumVisibility(false);
+			albumPlaceholder.focus();
 			break;
 		case State.ALBUM_NOT_EMPTY:
 			if (storedPhotos.length === 0) {
@@ -386,6 +387,7 @@ const setState = (state, overrideMessage) => {
 			}
 			setAlbumVisibility(true);
 			updateAlbumPhoto();
+			albumPhotoBtn.focus();
 			break;
 	}
 
@@ -676,7 +678,7 @@ function buildFaceDetectionLabel(faceCount, evals) {
 }
 
 function updatePreviewAriaLabel(faceCount, evals) {
-	let label = buildFaceDetectionLabel(faceCount, evals);
+	let label = `Camera preview, ${buildFaceDetectionLabel(faceCount, evals)}`;
 
 	if (hasUserKey) {
 		label += ". Click to describe current frame";
