@@ -81,6 +81,7 @@ export function setupSpeechControlUI(manager) {
 			} else {
 				localStorage.removeItem("user_key");
 			}
+			window.dispatchEvent(new Event("keyupdate"));
 		} catch (_) {}
 		updateTokenButton();
 	});
