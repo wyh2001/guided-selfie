@@ -124,8 +124,7 @@ app.innerHTML = `
         type="button"
         class="mode-toggle-button"
         data-action="toggle-mode"
-        aria-label="Toggle control mode"
-		aria-pressed="false"
+        aria-label="Guide mode, switch to voice mode"
         title="Switch between Simple Mode and Voice Control Mode"
       >GUIDE</button>
     </div>
@@ -169,7 +168,7 @@ let isVoiceControlMode = (() => {
 if (isVoiceControlMode) {
 	modeToggleBtn.textContent = "VOICE";
 	modeToggleBtn.classList.add("voice-mode");
-	modeToggleBtn.setAttribute("aria-pressed", "true");
+	modeToggleBtn.setAttribute("aria-label", "Voice mode, switch to guide mode");
 	speechManager.enableVADMode();
 }
 
@@ -745,12 +744,18 @@ modeToggleBtn.addEventListener("click", () => {
 	if (isVoiceControlMode) {
 		modeToggleBtn.textContent = "VOICE";
 		modeToggleBtn.classList.add("voice-mode");
-		modeToggleBtn.setAttribute("aria-pressed", "true");
+		modeToggleBtn.setAttribute(
+			"aria-label",
+			"Voice mode, switch to guide mode",
+		);
 		speechManager.enableVADMode();
 	} else {
 		modeToggleBtn.textContent = "GUIDE";
 		modeToggleBtn.classList.remove("voice-mode");
-		modeToggleBtn.setAttribute("aria-pressed", "false");
+		modeToggleBtn.setAttribute(
+			"aria-label",
+			"Guide mode, switch to voice mode",
+		);
 		speechManager.disableVADMode();
 	}
 });
