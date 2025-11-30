@@ -79,27 +79,6 @@ const speechManager = new SpeechManager();
 speechManager.enableTTS(true);
 
 app.innerHTML = `
-    <div class="bottom-bar" role="toolbar" aria-label="Camera controls">
-      <button
-        type="button"
-        class="album-button"
-        data-action="album"
-        aria-label="Open album"
-      ></button>
-      <button
-        type="button"
-        class="capture-button"
-        data-action="capture"
-        aria-label="Take photo"
-      ></button>
-      <button
-        type="button"
-        class="mode-toggle-button"
-        data-action="toggle-mode"
-        aria-label="Guide mode, switch to voice mode"
-        title="Switch between Simple Mode and Voice Control Mode"
-      >GUIDE</button>
-    </div>
   <main class="capture">
     <section class="preview" role="region" aria-label="Camera preview">
       <div class="video-placeholder">Awaiting camera…</div>
@@ -128,6 +107,27 @@ app.innerHTML = `
       <div class="album-counter" role="status" aria-live="polite"></div>
     </div>
   </section>
+    <div class="bottom-bar" role="toolbar" aria-label="Camera controls">
+      <button
+        type="button"
+        class="album-button"
+        data-action="album"
+        aria-label="Open album"
+      ></button>
+      <button
+        type="button"
+        class="capture-button"
+        data-action="capture"
+        aria-label="Take photo"
+      ></button>
+      <button
+        type="button"
+        class="mode-toggle-button"
+        data-action="toggle-mode"
+        aria-label="Guide mode, switch to voice mode"
+        title="Switch between Simple Mode and Voice Control Mode"
+      >GUIDE</button>
+    </div>
 `;
 
 const video = app.querySelector("video");
