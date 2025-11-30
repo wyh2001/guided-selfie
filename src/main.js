@@ -102,7 +102,9 @@ app.innerHTML = `
         <p>Take a photo to get started</p>
       </div>
       <button type="button" class="album-nav-btn album-prev" data-action="prev-photo" aria-label="Previous photo">‹</button>
-      <img class="album-photo" alt="Photo">
+      <button type="button" class="album-photo-btn" aria-label="Photo">
+        <img class="album-photo" alt="Photo">
+      </button>
       <button type="button" class="album-nav-btn album-next" data-action="next-photo" aria-label="Next photo">›</button>
       <div class="album-counter" role="status" aria-live="polite"></div>
     </div>
@@ -142,6 +144,7 @@ const preview = app.querySelector(".preview");
 const albumBtn = app.querySelector(".album-button");
 const albumView = app.querySelector(".album-view");
 const albumPhoto = app.querySelector(".album-photo");
+const albumPhotoBtn = app.querySelector(".album-photo-btn");
 const albumCounter = app.querySelector(".album-counter");
 const albumPlaceholder = app.querySelector(".album-placeholder");
 const prevBtn = app.querySelector('[data-action="prev-photo"]');
@@ -200,6 +203,29 @@ preview.addEventListener("click", async () => {
 	} catch (error) {
 		console.error("Failed to describe frame:", error);
 		const errorMsg = "Failed to describe frame";
+		await speechManager.speak(errorMsg);
+		status.textContent = errorMsg;
+	} finally {
+		isProcessingCommand = false;
+	}
+});
+
+albumPhotoBtn.disabled = !hasUserKey;
+albumPhotoBtn.addEventListener("click", async () => {
+	if (isProcessingCommand) return;
+	isProcessingCommand = true;
+	status.textContent = "Analyzing photo...";
+
+	try {
+		const description = await toolManager.executeTool("describe_photo", {
+			source: "album",
+			index: currentPhotoIndex,
+		});
+		await speechManager.speak(description);
+		status.textContent = description;
+	} catch (error) {
+		console.error("Failed to describe photo:", error);
+		const errorMsg = "Failed to describe photo";
 		await speechManager.speak(errorMsg);
 		status.textContent = errorMsg;
 	} finally {
@@ -351,11 +377,9 @@ const setState = (state, overrideMessage) => {
 			break;
 		case State.ALBUM_EMPTY:
 			currentPhotoIndex = 0;
-			faceService.stop();
 			setAlbumVisibility(false);
 			break;
 		case State.ALBUM_NOT_EMPTY:
-			faceService.stop();
 			if (storedPhotos.length === 0) {
 				setAlbumVisibility(false);
 				break;
@@ -556,7 +580,7 @@ function setAlbumVisibility(hasPhotos) {
 	}
 }
 
-function updateAlbumPhoto() {
+async function updateAlbumPhoto() {
 	if (storedPhotos.length === 0) {
 		return;
 	}
@@ -571,6 +595,33 @@ function updateAlbumPhoto() {
 	albumCounter.textContent = `${currentPhotoIndex + 1} / ${storedPhotos.length}`;
 	prevBtn.disabled = currentPhotoIndex === 0;
 	nextBtn.disabled = currentPhotoIndex === storedPhotos.length - 1;
+
+	albumPhoto.onload = async () => {
+		try {
+			const img = new Image();
+			img.src = url;
+			await img.decode();
+
+			const detections = await faceService.detectImage(img);
+			const evals = evaluateFacePosition(detections, img.width, img.height);
+
+			let label = `Photo ${currentPhotoIndex + 1}, `;
+			label += buildFaceDetectionLabel(detections.length, evals);
+
+			if (hasUserKey) {
+				label += ". Click to describe photo";
+			}
+
+			albumPhotoBtn.setAttribute("aria-label", label);
+		} catch (error) {
+			console.error("Failed to detect faces in album photo:", error);
+			let fallbackLabel = `Photo ${currentPhotoIndex + 1}`;
+			if (hasUserKey) {
+				fallbackLabel += ". Click to describe photo";
+			}
+			albumPhotoBtn.setAttribute("aria-label", fallbackLabel);
+		}
+	};
 }
 
 function initializeAlbumView(startIndex = 0) {
@@ -600,7 +651,7 @@ const faceDistance = {
 	NORMAL: "normal",
 };
 
-function updatePreviewAriaLabel(faceCount, evals) {
+function buildFaceDetectionLabel(faceCount, evals) {
 	let label = `${faceCount} face${faceCount !== 1 ? "s" : ""} detected`;
 
 	if (faceCount > 0 && evals.length > 0) {
@@ -621,13 +672,11 @@ function updatePreviewAriaLabel(faceCount, evals) {
 		}
 	}
 
-	const hasUserKey = (() => {
-		try {
-			return !!localStorage.getItem("user_key");
-		} catch (_) {
-			return false;
-		}
-	})();
+	return label;
+}
+
+function updatePreviewAriaLabel(faceCount, evals) {
+	let label = buildFaceDetectionLabel(faceCount, evals);
 
 	if (hasUserKey) {
 		label += ". Click to describe current frame";

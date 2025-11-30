@@ -252,6 +252,22 @@ button:disabled {
 	height: calc(100% - 60px);
 }
 
+.album-photo-btn {
+	border: none;
+	background: none;
+	padding: 0;
+	cursor: pointer;
+	max-width: 100%;
+	max-height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.album-photo-btn:disabled {
+	cursor: default;
+}
+
 .album-photo {
 	max-width: 100%;
 	max-height: 100%;
