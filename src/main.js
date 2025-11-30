@@ -101,7 +101,7 @@ app.innerHTML = `
       >GUIDE</button>
     </div>
   <main class="capture">
-    <section class="preview">
+    <section class="preview" role="region" aria-label="Camera preview">
       <div class="video-placeholder">Awaiting camera…</div>
       <video autoplay playsinline hidden></video>
       <canvas id="segmentation-canvas" hidden aria-label="High contrast video preview"></canvas>
@@ -310,6 +310,7 @@ const setState = (state, overrideMessage) => {
 			faceService.start(video, handleDetections, (error) => {
 				console.error("Face detection error:", error);
 			});
+			preview.focus();
 			break;
 		case State.ERROR:
 			debug.textContent = "";
@@ -407,6 +408,9 @@ function handleDetections(detections) {
 	evals.forEach((evaluation, index) => {
 		debug.textContent += `Face ${index + 1}: position: ${evaluation.positions.join("-")}, distance: ${evaluation.distance}\n`;
 	});
+
+	updatePreviewAriaLabel(detections.length, evals);
+
 	guideUser(evals, detections.length);
 }
 
@@ -564,6 +568,30 @@ const faceDistance = {
 	FAR: "far",
 	NORMAL: "normal",
 };
+
+function updatePreviewAriaLabel(faceCount, evals) {
+	let label = `${faceCount} face${faceCount !== 1 ? "s" : ""} detected`;
+
+	if (faceCount > 0 && evals.length > 0) {
+		const evaluation = evals[0];
+		const positions = evaluation.positions;
+
+		if (positions.includes(facePosition.CENTERED)) {
+			label += ", face centered";
+		} else {
+			const positionParts = [];
+			if (positions.includes(facePosition.TOP)) positionParts.push("top");
+			if (positions.includes(facePosition.BOTTOM)) positionParts.push("bottom");
+			if (positions.includes(facePosition.LEFT)) positionParts.push("left");
+			if (positions.includes(facePosition.RIGHT)) positionParts.push("right");
+			if (positionParts.length > 0) {
+				label += `, face on ${positionParts.join(" and ")}`;
+			}
+		}
+	}
+
+	preview.setAttribute("aria-label", label);
+}
 
 function evaluateFacePosition(detections, videoWidth, videoHeight) {
 	if (detections.length === 0) {
