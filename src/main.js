@@ -377,10 +377,12 @@ const setState = (state, overrideMessage) => {
 			break;
 		case State.ALBUM_EMPTY:
 			currentPhotoIndex = 0;
+			faceService.stop();
 			setAlbumVisibility(false);
 			albumPlaceholder.focus();
 			break;
 		case State.ALBUM_NOT_EMPTY:
+			faceService.stop();
 			if (storedPhotos.length === 0) {
 				setAlbumVisibility(false);
 				break;
