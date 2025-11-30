@@ -7,10 +7,18 @@ import { HarkService } from './hark-service.js';
 import { SpeechRecognitionService } from './SpeechRecognitionService.js';
 import { TextToSpeechService } from './TextToSpeechService.js';
 import { VADService } from './vad-service.js';
+import { VoskRecognitionService } from './vosk-recognition-service.js';
 
 export class SpeechManager {
   constructor() {
-    this.recognition = new SpeechRecognitionService();
+    // Fallback
+    const hasWebSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    this.recognition = hasWebSpeech
+      ? new SpeechRecognitionService()
+      : new VoskRecognitionService();
+
+    console.log(`Using ${hasWebSpeech ? 'Web Speech API' : 'Vosk'} for recognition`);
+
     this.tts = new TextToSpeechService();
     this.vad = new VADService();
     this.hark = new HarkService();
