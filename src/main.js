@@ -937,6 +937,24 @@ deleteBtn.addEventListener("click", async () => {
 	setState(State.ALBUM_NOT_EMPTY);
 });
 
+document.addEventListener("visibilitychange", () => {
+	if (document.hidden) {
+		if (video.srcObject) {
+			video.srcObject.getTracks().forEach((track) => {
+				track.stop();
+			});
+			video.srcObject = null;
+		}
+		faceService.stop();
+		speechManager.disableVADMode();
+	} else {
+		setupCamera();
+		if (isVoiceControlMode) {
+			speechManager.enableVADMode();
+		}
+	}
+});
+
 window.addEventListener("beforeunload", () => {
 	photoService.dispose();
 	faceService.dispose();
