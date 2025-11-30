@@ -262,6 +262,12 @@ const defaultPlaceholderText = placeholder.textContent;
 let isGuidingActive = false;
 let stopGuidingCallback = null;
 
+// Avoid redundant updates
+let lastPreviewAriaLabel = "";
+let lastAlbumAriaLabel = "";
+let lastPreviewAriaLabelUpdateTime = 0;
+const ARIA_LABEL_UPDATE_INTERVAL = 1000;
+
 const setVisible = (element, visible) => {
 	if (!element) {
 		return;
@@ -363,6 +369,8 @@ const setState = (state, overrideMessage) => {
 		case State.CAMERA_READY:
 			break;
 		case State.READY:
+			lastPreviewAriaLabel = "";
+			lastPreviewAriaLabelUpdateTime = 0;
 			faceService.stop();
 			faceService.start(video, handleDetections, (error) => {
 				console.error("Face detection error:", error);
@@ -376,12 +384,14 @@ const setState = (state, overrideMessage) => {
 			faceBoxElements.length = 0;
 			break;
 		case State.ALBUM_EMPTY:
+			lastAlbumAriaLabel = "";
 			currentPhotoIndex = 0;
 			faceService.stop();
 			setAlbumVisibility(false);
 			albumPlaceholder.focus();
 			break;
 		case State.ALBUM_NOT_EMPTY:
+			lastAlbumAriaLabel = "";
 			faceService.stop();
 			if (storedPhotos.length === 0) {
 				setAlbumVisibility(false);
@@ -616,14 +626,20 @@ async function updateAlbumPhoto() {
 				label += ". Click to describe photo";
 			}
 
-			albumPhotoBtn.setAttribute("aria-label", label);
+			if (label !== lastAlbumAriaLabel) {
+				lastAlbumAriaLabel = label;
+				albumPhotoBtn.setAttribute("aria-label", label);
+			}
 		} catch (error) {
 			console.error("Failed to detect faces in album photo:", error);
 			let fallbackLabel = `Photo ${currentPhotoIndex + 1}`;
 			if (hasUserKey) {
 				fallbackLabel += ". Click to describe photo";
 			}
-			albumPhotoBtn.setAttribute("aria-label", fallbackLabel);
+			if (fallbackLabel !== lastAlbumAriaLabel) {
+				lastAlbumAriaLabel = fallbackLabel;
+				albumPhotoBtn.setAttribute("aria-label", fallbackLabel);
+			}
 		}
 	};
 }
@@ -686,6 +702,17 @@ function updatePreviewAriaLabel(faceCount, evals) {
 		label += ". Click to describe current frame";
 	}
 
+	if (label === lastPreviewAriaLabel) {
+		return;
+	}
+
+	const now = Date.now();
+	if (now - lastPreviewAriaLabelUpdateTime < ARIA_LABEL_UPDATE_INTERVAL) {
+		return;
+	}
+
+	lastPreviewAriaLabel = label;
+	lastPreviewAriaLabelUpdateTime = now;
 	preview.setAttribute("aria-label", label);
 }
 
