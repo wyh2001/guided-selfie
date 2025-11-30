@@ -21,8 +21,10 @@ export class SpeechManager {
     this._currentSpeakToken = null; // Make sure only latest speak resumes listening
     this._suspendedByTTS = false;
     this._wantListening = false; // Whether user wants listening active
+    this._vadModeEnabled = false;
     this._speakQueue = Promise.resolve();
     this._lastTranscript = { text: '', at: 0 };
+    this._externalOnEnd = null;
     // Set up command processing
     this.setupCommandProcessing();
 
@@ -35,7 +37,9 @@ export class SpeechManager {
       // Start recognition if not already active
       if (!this.isListening()) {
         try {
-          await this.recognition.start();
+          // Stop VAD to release microphone before starting SR
+          await this.vad.stop();
+          await this._startListeningInternal();
         } catch (e) {
           console.error('Failed to start recognition on VAD speechStart:', e);
         }
@@ -45,13 +49,6 @@ export class SpeechManager {
     this.vad.onSpeechEnd = async () => {
       if (this._isExpectReplyActive()) {
         return;
-      }
-      if (this.isListening()) {
-        try {
-          await this.recognition.stop();
-        } catch (e) {
-          console.error('Failed to stop recognition on VAD speechEnd:', e);
-        }
       }
     };
 
@@ -81,10 +78,25 @@ export class SpeechManager {
       }
     };
 
-    // For debugging
-    this.recognition.onEnd = () => {
-      if (this._wantListening && this.isVADModeActive()) {
-        console.info('Recognition session ended; VAD/Hark will restart on next speech');
+    this.recognition.onEnd = async () => {
+      console.info('Recognition session ended');
+
+      // Restart VAD if _vadModeEnabled OR _wantListening OR VAD is not already running
+      if (this._vadModeEnabled && this._wantListening && !this.vad.isActive()) {
+        try {
+          console.info('Restarting VAD to listen for next speech');
+          await this.vad.start();
+        } catch (e) {
+          console.warn('Failed to restart VAD after recognition ended:', e);
+        }
+      }
+
+      if (this._externalOnEnd) {
+        try {
+          this._externalOnEnd();
+        } catch (e) {
+          console.error('Error in external onEnd callback:', e);
+        }
       }
     };
   }
@@ -345,7 +357,7 @@ export class SpeechManager {
    * Set callback for when recognition ends
    */
   onRecognitionEnd(callback) {
-    this.recognition.onEnd = callback;
+    this._externalOnEnd = callback;
   }
 
   /**
@@ -404,6 +416,14 @@ export class SpeechManager {
     if (this.isSpeakingNow()) {
       this.cancelSpeech();
     }
+    if (this.vad.isActive()) {
+      try {
+        await this.vad.stop();
+        console.info('Stopped VAD before starting SR to avoid mic conflict');
+      } catch (e) {
+        console.warn('Failed to stop VAD before starting SR:', e);
+      }
+    }
     try {
       await this.recognition.start();
     } catch (error) {
@@ -415,19 +435,28 @@ export class SpeechManager {
    * Enable VAD-driven listening
    */
   async enableVADMode() {
+    this._vadModeEnabled = true;
     this._wantListening = true;
-    // Ensure fallback is not running
-    try { await this.hark.stop(); } catch {}
-    try {
-      await this.vad.start();
-      console.info('Voice detection: VAD enabled');
-      // Ensure hark stays stopped
+
+    if (this.isListening()) {
+      console.info('SR is running, VAD will start after recognition ends');
+      return;
+    }
+
+    if (!this.vad.isActive()) {
+      // Ensure fallback is not running
       try { await this.hark.stop(); } catch {}
-    } catch (e) {
-      console.warn('VAD failed, falling back to Hark', e);
-      try { await this.vad.stop(); } catch {}
-      await this.hark.start();
-      console.info('Voice detection: Hark fallback enabled');
+      try {
+        await this.vad.start();
+        console.info('Voice detection: VAD enabled');
+        // Ensure hark stays stopped
+        try { await this.hark.stop(); } catch {}
+      } catch (e) {
+        console.warn('VAD failed, falling back to Hark', e);
+        try { await this.vad.stop(); } catch {}
+        await this.hark.start();
+        console.info('Voice detection: Hark fallback enabled');
+      }
     }
   }
 
@@ -435,6 +464,7 @@ export class SpeechManager {
    * Disable VAD-driven listening
    */
   async disableVADMode() {
+    this._vadModeEnabled = false;
     this._wantListening = false;
     // Stop both detectors
     try { await this.vad.stop(); } catch {}
