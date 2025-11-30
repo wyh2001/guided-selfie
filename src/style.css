@@ -49,6 +49,13 @@ body {
 	justify-items: center;
 	position: relative;
 	overflow: hidden;
+	border: none;
+	background: none;
+	padding: 0;
+	width: 100%;
+	text-align: inherit;
+	font: inherit;
+	color: inherit;
 }
 
 .actions {
@@ -245,6 +252,22 @@ button:disabled {
 	height: calc(100% - 60px);
 }
 
+.album-photo-btn {
+	border: none;
+	background: none;
+	padding: 0;
+	cursor: pointer;
+	max-width: 100%;
+	max-height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.album-photo-btn:disabled {
+	cursor: default;
+}
+
 .album-photo {
 	max-width: 100%;
 	max-height: 100%;
@@ -293,6 +316,10 @@ button:disabled {
 }
 
 .album-placeholder {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
 	text-align: center;
 	color: #fff;
 }

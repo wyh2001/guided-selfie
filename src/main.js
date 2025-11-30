@@ -80,12 +80,12 @@ speechManager.enableTTS(true);
 
 app.innerHTML = `
   <main class="capture">
-    <section class="preview">
+    <button type="button" class="preview" aria-label="Camera preview">
       <div class="video-placeholder">Awaiting camera…</div>
       <video autoplay playsinline hidden></video>
       <canvas id="segmentation-canvas" hidden aria-label="High contrast video preview"></canvas>
       <img alt="snapshot" hidden />
-    </section>
+    </button>
     <section class="actions">
     </section>
     <p class="status" hidden></p>
@@ -102,7 +102,9 @@ app.innerHTML = `
         <p>Take a photo to get started</p>
       </div>
       <button type="button" class="album-nav-btn album-prev" data-action="prev-photo" aria-label="Previous photo">‹</button>
-      <img class="album-photo" alt="Photo">
+      <button type="button" class="album-photo-btn" aria-label="Photo">
+        <img class="album-photo" alt="Photo">
+      </button>
       <button type="button" class="album-nav-btn album-next" data-action="next-photo" aria-label="Next photo">›</button>
       <div class="album-counter" role="status" aria-live="polite"></div>
     </div>
@@ -124,8 +126,7 @@ app.innerHTML = `
         type="button"
         class="mode-toggle-button"
         data-action="toggle-mode"
-        aria-label="Toggle control mode"
-		aria-pressed="false"
+        aria-label="Guide mode, switch to voice mode"
         title="Switch between Simple Mode and Voice Control Mode"
       >GUIDE</button>
     </div>
@@ -143,6 +144,7 @@ const preview = app.querySelector(".preview");
 const albumBtn = app.querySelector(".album-button");
 const albumView = app.querySelector(".album-view");
 const albumPhoto = app.querySelector(".album-photo");
+const albumPhotoBtn = app.querySelector(".album-photo-btn");
 const albumCounter = app.querySelector(".album-counter");
 const albumPlaceholder = app.querySelector(".album-placeholder");
 const prevBtn = app.querySelector('[data-action="prev-photo"]');
@@ -169,12 +171,66 @@ let isVoiceControlMode = (() => {
 if (isVoiceControlMode) {
 	modeToggleBtn.textContent = "VOICE";
 	modeToggleBtn.classList.add("voice-mode");
-	modeToggleBtn.setAttribute("aria-pressed", "true");
+	modeToggleBtn.setAttribute("aria-label", "Voice mode, switch to guide mode");
 	speechManager.enableVADMode();
 }
 
 albumPhoto.addEventListener("error", () => {
 	console.warn("Failed to load image:", albumPhoto.src);
+});
+
+const hasUserKey = (() => {
+	try {
+		return !!localStorage.getItem("user_key");
+	} catch (_) {
+		return false;
+	}
+})();
+
+preview.disabled = !hasUserKey;
+
+preview.addEventListener("click", async () => {
+	if (isProcessingCommand) return;
+	isProcessingCommand = true;
+	status.textContent = "Analyzing frame...";
+
+	try {
+		const description = await toolManager.executeTool("describe_photo", {
+			source: "camera",
+		});
+		await speechManager.speak(description);
+		status.textContent = description;
+	} catch (error) {
+		console.error("Failed to describe frame:", error);
+		const errorMsg = "Failed to describe frame";
+		await speechManager.speak(errorMsg);
+		status.textContent = errorMsg;
+	} finally {
+		isProcessingCommand = false;
+	}
+});
+
+albumPhotoBtn.disabled = !hasUserKey;
+albumPhotoBtn.addEventListener("click", async () => {
+	if (isProcessingCommand) return;
+	isProcessingCommand = true;
+	status.textContent = "Analyzing photo...";
+
+	try {
+		const description = await toolManager.executeTool("describe_photo", {
+			source: "album",
+			index: currentPhotoIndex,
+		});
+		await speechManager.speak(description);
+		status.textContent = description;
+	} catch (error) {
+		console.error("Failed to describe photo:", error);
+		const errorMsg = "Failed to describe photo";
+		await speechManager.speak(errorMsg);
+		status.textContent = errorMsg;
+	} finally {
+		isProcessingCommand = false;
+	}
 });
 
 const faceBoxElements = [];
@@ -311,6 +367,7 @@ const setState = (state, overrideMessage) => {
 			faceService.start(video, handleDetections, (error) => {
 				console.error("Face detection error:", error);
 			});
+			preview.focus();
 			break;
 		case State.ERROR:
 			debug.textContent = "";
@@ -322,6 +379,7 @@ const setState = (state, overrideMessage) => {
 			currentPhotoIndex = 0;
 			faceService.stop();
 			setAlbumVisibility(false);
+			albumPlaceholder.focus();
 			break;
 		case State.ALBUM_NOT_EMPTY:
 			faceService.stop();
@@ -331,6 +389,7 @@ const setState = (state, overrideMessage) => {
 			}
 			setAlbumVisibility(true);
 			updateAlbumPhoto();
+			albumPhotoBtn.focus();
 			break;
 	}
 
@@ -408,6 +467,9 @@ function handleDetections(detections) {
 	evals.forEach((evaluation, index) => {
 		debug.textContent += `Face ${index + 1}: position: ${evaluation.positions.join("-")}, distance: ${evaluation.distance}\n`;
 	});
+
+	updatePreviewAriaLabel(detections.length, evals);
+
 	guideUser(evals, detections.length);
 }
 
@@ -522,7 +584,7 @@ function setAlbumVisibility(hasPhotos) {
 	}
 }
 
-function updateAlbumPhoto() {
+async function updateAlbumPhoto() {
 	if (storedPhotos.length === 0) {
 		return;
 	}
@@ -537,6 +599,33 @@ function updateAlbumPhoto() {
 	albumCounter.textContent = `${currentPhotoIndex + 1} / ${storedPhotos.length}`;
 	prevBtn.disabled = currentPhotoIndex === 0;
 	nextBtn.disabled = currentPhotoIndex === storedPhotos.length - 1;
+
+	albumPhoto.onload = async () => {
+		try {
+			const img = new Image();
+			img.src = url;
+			await img.decode();
+
+			const detections = await faceService.detectImage(img);
+			const evals = evaluateFacePosition(detections, img.width, img.height);
+
+			let label = `Photo ${currentPhotoIndex + 1}, `;
+			label += buildFaceDetectionLabel(detections.length, evals);
+
+			if (hasUserKey) {
+				label += ". Click to describe photo";
+			}
+
+			albumPhotoBtn.setAttribute("aria-label", label);
+		} catch (error) {
+			console.error("Failed to detect faces in album photo:", error);
+			let fallbackLabel = `Photo ${currentPhotoIndex + 1}`;
+			if (hasUserKey) {
+				fallbackLabel += ". Click to describe photo";
+			}
+			albumPhotoBtn.setAttribute("aria-label", fallbackLabel);
+		}
+	};
 }
 
 function initializeAlbumView(startIndex = 0) {
@@ -565,6 +654,40 @@ const faceDistance = {
 	FAR: "far",
 	NORMAL: "normal",
 };
+
+function buildFaceDetectionLabel(faceCount, evals) {
+	let label = `${faceCount} face${faceCount !== 1 ? "s" : ""} detected`;
+
+	if (faceCount > 0 && evals.length > 0) {
+		const evaluation = evals[0];
+		const positions = evaluation.positions;
+
+		if (positions.includes(facePosition.CENTERED)) {
+			label += ", face centered";
+		} else {
+			const positionParts = [];
+			if (positions.includes(facePosition.TOP)) positionParts.push("top");
+			if (positions.includes(facePosition.BOTTOM)) positionParts.push("bottom");
+			if (positions.includes(facePosition.LEFT)) positionParts.push("left");
+			if (positions.includes(facePosition.RIGHT)) positionParts.push("right");
+			if (positionParts.length > 0) {
+				label += `, face on ${positionParts.join(" and ")}`;
+			}
+		}
+	}
+
+	return label;
+}
+
+function updatePreviewAriaLabel(faceCount, evals) {
+	let label = `Camera preview, ${buildFaceDetectionLabel(faceCount, evals)}`;
+
+	if (hasUserKey) {
+		label += ". Click to describe current frame";
+	}
+
+	preview.setAttribute("aria-label", label);
+}
 
 function evaluateFacePosition(detections, videoWidth, videoHeight) {
 	if (detections.length === 0) {
@@ -745,12 +868,18 @@ modeToggleBtn.addEventListener("click", () => {
 	if (isVoiceControlMode) {
 		modeToggleBtn.textContent = "VOICE";
 		modeToggleBtn.classList.add("voice-mode");
-		modeToggleBtn.setAttribute("aria-pressed", "true");
+		modeToggleBtn.setAttribute(
+			"aria-label",
+			"Voice mode, switch to guide mode",
+		);
 		speechManager.enableVADMode();
 	} else {
 		modeToggleBtn.textContent = "GUIDE";
 		modeToggleBtn.classList.remove("voice-mode");
-		modeToggleBtn.setAttribute("aria-pressed", "false");
+		modeToggleBtn.setAttribute(
+			"aria-label",
+			"Guide mode, switch to voice mode",
+		);
 		speechManager.disableVADMode();
 	}
 });
@@ -810,6 +939,24 @@ deleteBtn.addEventListener("click", async () => {
 	}
 	refreshAlbumThumbnail();
 	setState(State.ALBUM_NOT_EMPTY);
+});
+
+document.addEventListener("visibilitychange", () => {
+	if (document.hidden) {
+		if (video.srcObject) {
+			video.srcObject.getTracks().forEach((track) => {
+				track.stop();
+			});
+			video.srcObject = null;
+		}
+		faceService.stop();
+		speechManager.disableVADMode();
+	} else {
+		setupCamera();
+		if (isVoiceControlMode) {
+			speechManager.enableVADMode();
+		}
+	}
 });
 
 window.addEventListener("beforeunload", () => {
