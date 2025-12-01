@@ -562,16 +562,16 @@ function drawFaceBoxes(detections, videoWidth, videoHeight) {
 		preview.appendChild(faceBoxElement);
 		faceBoxElements.push(faceBoxElement);
 
-		const keypoints = detection.keypoints;
-		keypoints.forEach((keypoint, index) => {
-			const keypointElement = document.createElement("div");
-			keypointElement.className = "key-point";
-			keypointElement.style.top = `${keypoint.y * videoHeight * ratio}px`;
-			keypointElement.style.left = `${(1 - keypoint.x) * videoWidth * ratio}px`;
-			keypointElement.textContent = index + 1;
-			preview.appendChild(keypointElement);
-			faceBoxElements.push(keypointElement);
-		});
+		// const keypoints = detection.keypoints;
+		// keypoints.forEach((keypoint, index) => {
+		// 	const keypointElement = document.createElement("div");
+		// 	keypointElement.className = "key-point";
+		// 	keypointElement.style.top = `${keypoint.y * videoHeight * ratio}px`;
+		// 	keypointElement.style.left = `${(1 - keypoint.x) * videoWidth * ratio}px`;
+		// 	keypointElement.textContent = index + 1;
+		// 	preview.appendChild(keypointElement);
+		// 	faceBoxElements.push(keypointElement);
+		// });
 	});
 }
 
