@@ -90,7 +90,7 @@ export class TextToSpeechService {
         cleanup(false);
       };
 
-      const timeout = options.timeout ?? 5000;
+      const timeout = options.timeout ?? 3000;
       timeoutId = setTimeout(() => {
         console.warn('Speech synthesis timeout after', timeout, 'ms');
         this.synthesis.cancel();
