@@ -1,0 +1,2 @@
+# A Web-Based Guided Selfie Assistant for People with Visual Impairments
+<img width="1192" height="1055" alt="High-level architecture diagram of the selfie web app, showing camera and local image processing, speech services, simple guidance mode, voice control mode, backend LLM/VLM proxies with Redis key validation, and external providers (OpenRouter/Gemini and a self-hosted VLM API)." src="https://github.com/user-attachments/assets/c3327ba2-b766-4043-8e48-da247ca824bb" />
