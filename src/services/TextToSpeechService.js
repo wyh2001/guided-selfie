@@ -65,7 +65,7 @@ export class TextToSpeechService {
    * @param {Object} options - Optional parameters (rate, pitch, volume)
    * @returns {Promise<boolean>} - Resolves to true if speech completed, false if not started or failed
    */
-  speakAsync(text, options = {}) {
+  async speakAsync(text, options = {}) {
     const speechId = ++this._debugSpeechId;
     const startTime = Date.now();
 
@@ -99,6 +99,7 @@ export class TextToSpeechService {
       timestamp: Date.now()
     });
     this.synthesis.cancel();
+    await new Promise(r => setTimeout(r, 50));
 
     const utterance = new SpeechSynthesisUtterance(text);
 
