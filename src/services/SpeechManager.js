@@ -241,6 +241,9 @@ export class SpeechManager {
   async speak(text, options = {}) {
     const speakId = ++this._debugSpeakId;
     const startTime = Date.now();
+    const vadWasActive = this.vad.isActive();
+    const harkWasActive = this.hark.isActive();
+    const detectorWasActive = vadWasActive || harkWasActive;
 
     // [SM_DEBUG] Log speak() entry with full context
     console.log(`[SM_DEBUG] speak() called #${speakId}`, {
@@ -248,13 +251,13 @@ export class SpeechManager {
       textPreview: text?.substring(0, 50),
       ttsEnabled: this.tts.isEnabled(),
       ttsSupported: this.tts.isSupported(),
-      vadActive: this.vad.isActive(),
-      harkActive: this.hark.isActive(),
+      vadActive: vadWasActive,
+      harkActive: harkWasActive,
       isListening: this.isListening(),
       vadModeEnabled: this._vadModeEnabled,
       wantListening: this._wantListening,
       // Hypothesis: If VAD/Hark is active when speak starts, they may detect TTS
-      potentialConflict: this.vad.isActive() || this.hark.isActive(),
+      potentialConflict: detectorWasActive,
       timestamp: startTime
     });
 
@@ -270,7 +273,9 @@ export class SpeechManager {
 
     console.log(`[SM_DEBUG] speak() #${speakId} pausing detectors before TTS`, { timestamp: Date.now() });
     await this._pauseDetectorsForTTS();
-    await new Promise(r => setTimeout(r, 500));
+    const preTTSDelay = detectorWasActive ? 800 : 500;
+    console.log(`[SM_DEBUG] speak() #${speakId} waiting ${preTTSDelay}ms before TTS (detectorWasActive: ${detectorWasActive})`, { timestamp: Date.now() });
+    await new Promise(r => setTimeout(r, preTTSDelay));
 
     // [SM_DEBUG] Log TTS start
     this._debugLastTTSStartTime = Date.now();
