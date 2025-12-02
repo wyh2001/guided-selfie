@@ -11,13 +11,26 @@ export class TextToSpeechService {
     this.rate = 1.0;
     this.pitch = 1.0;
     this.volume = 1.0;
-    
+
     // Callback for when enabled state changes
     this.onEnabledChange = null;
-    
+
+    // Debug: Track speech timing for mobile truncation diagnosis
+    this._debugSpeechId = 0;
+    this._debugLastSpeechStart = 0;
+
     if (!this.synthesis) {
       console.warn('Speech Synthesis API not supported in this browser');
     }
+
+    // [TTS_DEBUG] Log initial synthesis state - hypothesis: mobile may have different initial state
+    console.log('[TTS_DEBUG] TextToSpeechService initialized', {
+      synthesisAvailable: !!this.synthesis,
+      userAgent: navigator.userAgent,
+      // Hypothesis: Mobile browsers may have different synthesis implementations
+      isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+      timestamp: Date.now()
+    });
   }
 
   /**
@@ -53,36 +66,169 @@ export class TextToSpeechService {
    * @returns {Promise<boolean>} - Resolves to true if speech completed, false if not started or failed
    */
   speakAsync(text, options = {}) {
+    const speechId = ++this._debugSpeechId;
+    const startTime = Date.now();
+
+    // [TTS_DEBUG] Log every speak attempt with hypothesis context
+    console.log(`[TTS_DEBUG] speakAsync called #${speechId}`, {
+      textLength: text?.length,
+      textPreview: text?.substring(0, 50),
+      enabled: this.enabled,
+      synthesisAvailable: !!this.synthesis,
+      // Hypothesis: If speaking is true when we start, previous speech may not have ended cleanly
+      currentlySpeaking: this.synthesis?.speaking,
+      currentlyPending: this.synthesis?.pending,
+      currentlyPaused: this.synthesis?.paused,
+      timeSinceLastSpeech: this._debugLastSpeechStart ? startTime - this._debugLastSpeechStart : 'first',
+      timestamp: startTime
+    });
+
     // Only speak if enabled
     if (!this.enabled || !this.synthesis || !text?.trim()) {
+      console.log(`[TTS_DEBUG] speakAsync #${speechId} early return - not enabled or no text`);
       return Promise.resolve(false);
     }
-    
+
     // Cancel any ongoing speech
+    // [TTS_DEBUG] Hypothesis: cancel() may behave differently on mobile, potentially causing issues
+    const wasSpeaking = this.synthesis.speaking;
+    console.log(`[TTS_DEBUG] #${speechId} calling synthesis.cancel()`, {
+      wasSpeaking,
+      wasPending: this.synthesis.pending,
+      // Hypothesis: On mobile, rapid cancel+speak may cause truncation
+      timestamp: Date.now()
+    });
     this.synthesis.cancel();
-    
+
     const utterance = new SpeechSynthesisUtterance(text);
-    
+
     // Use custom voice if set
     if (this.voice) {
       utterance.voice = this.voice;
     }
-    
+
     // Apply options or use defaults
     utterance.rate = options.rate ?? this.rate;
     utterance.pitch = options.pitch ?? this.pitch;
     utterance.volume = options.volume ?? this.volume;
 
+    // [TTS_DEBUG] Log utterance configuration
+    console.log(`[TTS_DEBUG] #${speechId} utterance configured`, {
+      rate: utterance.rate,
+      pitch: utterance.pitch,
+      volume: utterance.volume,
+      voiceName: utterance.voice?.name || 'default',
+      lang: utterance.lang || 'default'
+    });
+
     return new Promise((resolve) => {
-      utterance.onend = () => resolve(true);
+      let utteranceStartTime = null;
+      let boundaryCount = 0;
+
+      // [TTS_DEBUG] Track utterance start - hypothesis: onstart may fire but speech gets cut
+      utterance.onstart = () => {
+        utteranceStartTime = Date.now();
+        this._debugLastSpeechStart = utteranceStartTime;
+        console.log(`[TTS_DEBUG] #${speechId} utterance.onstart fired`, {
+          timeSinceRequest: utteranceStartTime - startTime,
+          synthesisState: {
+            speaking: this.synthesis.speaking,
+            pending: this.synthesis.pending,
+            paused: this.synthesis.paused
+          },
+          // Hypothesis: Long delay between request and start may indicate queue issues
+          timestamp: utteranceStartTime
+        });
+      };
+
+      // [TTS_DEBUG] Track word boundaries - hypothesis: speech may be cut mid-word
+      utterance.onboundary = (event) => {
+        boundaryCount++;
+        // Log every 5th boundary to avoid spam, but always log first few
+        if (boundaryCount <= 3 || boundaryCount % 5 === 0) {
+          console.log(`[TTS_DEBUG] #${speechId} utterance.onboundary #${boundaryCount}`, {
+            name: event.name,
+            charIndex: event.charIndex,
+            charLength: event.charLength,
+            elapsedTime: event.elapsedTime,
+            // Hypothesis: If charIndex is less than text length at onend, speech was truncated
+            textLength: text.length,
+            timestamp: Date.now()
+          });
+        }
+      };
+
+      // [TTS_DEBUG] Track pause events - hypothesis: mobile may pause unexpectedly
+      utterance.onpause = () => {
+        console.log(`[TTS_DEBUG] #${speechId} utterance.onpause fired`, {
+          duration: utteranceStartTime ? Date.now() - utteranceStartTime : 'unknown',
+          // Hypothesis: Unexpected pause may be caused by audio focus loss to VAD/mic
+          timestamp: Date.now()
+        });
+      };
+
+      // [TTS_DEBUG] Track resume events
+      utterance.onresume = () => {
+        console.log(`[TTS_DEBUG] #${speechId} utterance.onresume fired`, {
+          timestamp: Date.now()
+        });
+      };
+
+      utterance.onend = () => {
+        const endTime = Date.now();
+        const duration = utteranceStartTime ? endTime - utteranceStartTime : 'unknown';
+        console.log(`[TTS_DEBUG] #${speechId} utterance.onend fired`, {
+          duration,
+          totalBoundaries: boundaryCount,
+          textLength: text.length,
+          // Hypothesis: Very short duration relative to text length indicates truncation
+          // Rough estimate: ~150 words/min = ~750 chars/min = ~12.5 chars/sec
+          expectedMinDuration: Math.floor(text.length / 15 * 1000), // conservative estimate
+          possibleTruncation: typeof duration === 'number' && duration < (text.length / 15 * 1000) * 0.5,
+          synthesisState: {
+            speaking: this.synthesis.speaking,
+            pending: this.synthesis.pending,
+            paused: this.synthesis.paused
+          },
+          timestamp: endTime
+        });
+        resolve(true);
+      };
+
       utterance.onerror = (error) => {
+        const errorTime = Date.now();
+        // [TTS_DEBUG] Detailed error logging - hypothesis: specific error types may indicate VAD interference
+        console.warn(`[TTS_DEBUG] #${speechId} utterance.onerror`, {
+          error: error.error,
+          errorMessage: error.message,
+          errorType: error.type,
+          // Hypothesis: 'interrupted' or 'canceled' errors may be caused by VAD triggering
+          charIndex: error.charIndex,
+          elapsedTime: error.elapsedTime,
+          duration: utteranceStartTime ? errorTime - utteranceStartTime : 'unknown',
+          totalBoundaries: boundaryCount,
+          textLength: text.length,
+          timestamp: errorTime
+        });
         console.warn('Speech synthesis error:', error);
         resolve(false);
       };
 
     try {
+      console.log(`[TTS_DEBUG] #${speechId} calling synthesis.speak()`, {
+        timestamp: Date.now()
+      });
       this.synthesis.speak(utterance);
+      // [TTS_DEBUG] Log state immediately after speak() call
+      console.log(`[TTS_DEBUG] #${speechId} after synthesis.speak()`, {
+        speaking: this.synthesis.speaking,
+        pending: this.synthesis.pending,
+        paused: this.synthesis.paused,
+        // Hypothesis: If not speaking/pending immediately, something may be wrong
+        timestamp: Date.now()
+      });
     } catch (error) {
+        console.error(`[TTS_DEBUG] #${speechId} synthesis.speak() threw exception`, error);
         console.error('Failed to initiate speech:', error);
         resolve(false);
       }
@@ -123,6 +269,14 @@ export class TextToSpeechService {
    */
   cancel() {
     if (this.synthesis) {
+      // [TTS_DEBUG] Log cancel calls - hypothesis: external cancel calls may be causing truncation
+      console.log('[TTS_DEBUG] cancel() called externally', {
+        wasSpeaking: this.synthesis.speaking,
+        wasPending: this.synthesis.pending,
+        // Hypothesis: If this is called while speaking, it may be from VAD interference
+        callStack: new Error().stack?.split('\n').slice(1, 5).join(' <- '),
+        timestamp: Date.now()
+      });
       this.synthesis.cancel();
     }
   }
@@ -175,6 +329,22 @@ export class TextToSpeechService {
    * Check if currently speaking
    */
   isSpeaking() {
-    return this.synthesis ? this.synthesis.speaking : false;
+    const speaking = this.synthesis ? this.synthesis.speaking : false;
+    // [TTS_DEBUG] Log isSpeaking checks occasionally - hypothesis: frequent checks during speech may indicate polling
+    if (this._debugIsSpeakingLogCount === undefined) {
+      this._debugIsSpeakingLogCount = 0;
+    }
+    this._debugIsSpeakingLogCount++;
+    // Log every 20th call to avoid spam
+    if (this._debugIsSpeakingLogCount % 20 === 0) {
+      console.log('[TTS_DEBUG] isSpeaking() polled', {
+        result: speaking,
+        pending: this.synthesis?.pending,
+        paused: this.synthesis?.paused,
+        callCount: this._debugIsSpeakingLogCount,
+        timestamp: Date.now()
+      });
+    }
+    return speaking;
   }
 }

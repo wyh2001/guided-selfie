@@ -17,7 +17,7 @@ export class SpeechManager {
     this.commandHandlers = new Map();
     this._expectReplyTimer = null;
     this._expectReplyDeadline = 0;
-    
+
     this._currentSpeakToken = null; // Make sure only latest speak resumes listening
     this._suspendedByTTS = false;
     this._wantListening = false; // Whether user wants listening active
@@ -25,18 +25,49 @@ export class SpeechManager {
     this._speakQueue = Promise.resolve();
     this._lastTranscript = { text: '', at: 0 };
     this._externalOnEnd = null;
+
+    // [SM_DEBUG] Debug tracking for mobile TTS truncation diagnosis
+    this._debugSpeakId = 0;
+    this._debugLastTTSStartTime = 0;
+    this._debugLastTTSEndTime = 0;
+
+    // [SM_DEBUG] Log initialization
+    console.log('[SM_DEBUG] SpeechManager initialized', {
+      userAgent: navigator.userAgent,
+      isMobile: /iPhone|iPad|iPod|Android/i.test(navigator.userAgent),
+      timestamp: Date.now()
+    });
+
     // Set up command processing
     this.setupCommandProcessing();
 
     // Use VAD to control recognition
     this.vad.onSpeechStart = async () => {
+      const now = Date.now();
+      const timeSinceLastTTSEnd = this._debugLastTTSEndTime ? now - this._debugLastTTSEndTime : 'never';
+      const isTTSSpeaking = this.isSpeakingNow();
+
+      // [SM_DEBUG] CRITICAL: VAD triggered speechStart - this may be causing TTS truncation
+      console.log('[SM_DEBUG] vad.onSpeechStart triggered', {
+        isTTSCurrentlySpeaking: isTTSSpeaking,
+        hasCurrentSpeakToken: !!this._currentSpeakToken,
+        timeSinceLastTTSEnd: timeSinceLastTTSEnd,
+        wantListening: this._wantListening,
+        // Hypothesis: If TTS is speaking when VAD fires, VAD is detecting TTS audio
+        possibleTTSDetection: isTTSSpeaking || (typeof timeSinceLastTTSEnd === 'number' && timeSinceLastTTSEnd < 500),
+        willIgnore: this.shouldIgnoreSpeechStart(),
+        timestamp: now
+      });
+
       // If TTS is speaking, cancel it
       if (this.shouldIgnoreSpeechStart()) {
+        console.log('[SM_DEBUG] vad.onSpeechStart - IGNORED (shouldIgnoreSpeechStart=true)', { timestamp: Date.now() });
         return;
       }
       // Start recognition if not already active
       if (!this.isListening()) {
         try {
+          console.log('[SM_DEBUG] vad.onSpeechStart - starting recognition', { timestamp: Date.now() });
           // Stop VAD to release microphone before starting SR
           await this.vad.stop();
           await this._startListeningInternal();
@@ -47,6 +78,10 @@ export class SpeechManager {
     };
 
     this.vad.onSpeechEnd = async () => {
+      console.log('[SM_DEBUG] vad.onSpeechEnd triggered', {
+        expectReplyActive: this._isExpectReplyActive(),
+        timestamp: Date.now()
+      });
       if (this._isExpectReplyActive()) {
         return;
       }
@@ -54,11 +89,26 @@ export class SpeechManager {
 
     // Use Hark fallback with the same logic
     this.hark.onSpeechStart = async () => {
+      const now = Date.now();
+      const isTTSSpeaking = this.isSpeakingNow();
+
+      // [SM_DEBUG] Hark triggered speechStart
+      console.log('[SM_DEBUG] hark.onSpeechStart triggered', {
+        isTTSCurrentlySpeaking: isTTSSpeaking,
+        hasCurrentSpeakToken: !!this._currentSpeakToken,
+        wantListening: this._wantListening,
+        possibleTTSDetection: isTTSSpeaking,
+        willIgnore: this.shouldIgnoreSpeechStart(),
+        timestamp: now
+      });
+
       if (this.shouldIgnoreSpeechStart()) {
+        console.log('[SM_DEBUG] hark.onSpeechStart - IGNORED', { timestamp: Date.now() });
         return;
       }
       if (!this.isListening()) {
         try {
+          console.log('[SM_DEBUG] hark.onSpeechStart - starting recognition', { timestamp: Date.now() });
           await this.recognition.start();
         } catch (e) {
           console.error('Failed to start recognition on Hark speechStart:', e);
@@ -66,11 +116,17 @@ export class SpeechManager {
       }
     };
     this.hark.onSpeechEnd = async () => {
+      console.log('[SM_DEBUG] hark.onSpeechEnd triggered', {
+        expectReplyActive: this._isExpectReplyActive(),
+        isListening: this.isListening(),
+        timestamp: Date.now()
+      });
       if (this._isExpectReplyActive()) {
         return;
       }
       if (this.isListening()) {
         try {
+          console.log('[SM_DEBUG] hark.onSpeechEnd - stopping recognition', { timestamp: Date.now() });
           await this.recognition.stop();
         } catch (e) {
           console.error('Failed to stop recognition on Hark speechEnd:', e);
@@ -123,8 +179,28 @@ export class SpeechManager {
    * @returns {Promise<boolean>} - Whether speech was actually spoken
    */
   async speak(text, options = {}) {
+    const speakId = ++this._debugSpeakId;
+    const startTime = Date.now();
+
+    // [SM_DEBUG] Log speak() entry with full context
+    console.log(`[SM_DEBUG] speak() called #${speakId}`, {
+      textLength: text?.length,
+      textPreview: text?.substring(0, 50),
+      ttsEnabled: this.tts.isEnabled(),
+      ttsSupported: this.tts.isSupported(),
+      vadActive: this.vad.isActive(),
+      harkActive: this.hark.isActive(),
+      isListening: this.isListening(),
+      vadModeEnabled: this._vadModeEnabled,
+      wantListening: this._wantListening,
+      // Hypothesis: If VAD/Hark is active when speak starts, they may detect TTS
+      potentialConflict: this.vad.isActive() || this.hark.isActive(),
+      timestamp: startTime
+    });
+
     // Do nothing if TTS is disabled or unsupported
     if (!this.tts.isEnabled() || !this.tts.isSupported() || !text?.trim()) {
+      console.log(`[SM_DEBUG] speak() #${speakId} early return - TTS disabled or no text`);
       return false;
     }
 
@@ -134,21 +210,59 @@ export class SpeechManager {
 
     // Remember if listening (to restore later)
     const wasListening = this.isListening();
+    const wasVadActive = this.vad.isActive();
+    const wasHarkActive = this.hark.isActive();
+
+    console.log(`[SM_DEBUG] speak() #${speakId} state before TTS`, {
+      wasListening,
+      wasVadActive,
+      wasHarkActive,
+      // Hypothesis: Not stopping VAD/Hark before TTS may cause them to detect TTS audio
+      timestamp: Date.now()
+    });
+
     if (wasListening) {
+      console.log(`[SM_DEBUG] speak() #${speakId} stopping listening before TTS`, { timestamp: Date.now() });
       await this._stopListeningInternal({ markSuspended: true });
     }
 
+    // [SM_DEBUG] Log TTS start
+    this._debugLastTTSStartTime = Date.now();
+    console.log(`[SM_DEBUG] speak() #${speakId} calling tts.speakAsync()`, {
+      vadStillActive: this.vad.isActive(),
+      harkStillActive: this.hark.isActive(),
+      // Hypothesis: If VAD/Hark still active here, they will hear TTS
+      timestamp: this._debugLastTTSStartTime
+    });
+
     // Speak
     const success = await this.tts.speakAsync(text, options);
+
+    this._debugLastTTSEndTime = Date.now();
+    const ttsDuration = this._debugLastTTSEndTime - this._debugLastTTSStartTime;
+
+    console.log(`[SM_DEBUG] speak() #${speakId} tts.speakAsync() returned`, {
+      success,
+      ttsDuration,
+      textLength: text?.length,
+      // Hypothesis: If duration is much shorter than expected, speech was truncated
+      expectedMinDuration: Math.floor(text.length / 15 * 1000),
+      possibleTruncation: ttsDuration < (text.length / 15 * 1000) * 0.5,
+      tokenStillValid: this._currentSpeakToken === token,
+      timestamp: this._debugLastTTSEndTime
+    });
 
     if (this._currentSpeakToken === token) {
       this._currentSpeakToken = null;
 
       // Restore only if suspended by TTS and previously active
       if (this._suspendedByTTS && wasListening) {
+        console.log(`[SM_DEBUG] speak() #${speakId} restoring listening after TTS`, { timestamp: Date.now() });
         await this._startListeningInternal();
       }
       this._suspendedByTTS = false;
+    } else {
+      console.log(`[SM_DEBUG] speak() #${speakId} token invalidated - newer speak in progress`, { timestamp: Date.now() });
     }
 
     return success;
@@ -161,6 +275,14 @@ export class SpeechManager {
    * @returns {Promise<boolean>} - Resolves after this queued speech completes
    */
   speakQueued(text, options = {}) {
+    // [SM_DEBUG] Log queued speech
+    console.log('[SM_DEBUG] speakQueued() called', {
+      textLength: text?.length,
+      textPreview: text?.substring(0, 30),
+      // Hypothesis: Rapid queuing may cause issues on mobile
+      timestamp: Date.now()
+    });
+
     const run = async () => {
       try {
         return await this.speak(text, options);
@@ -204,6 +326,13 @@ export class SpeechManager {
    * Cancel any ongoing speech
    */
   cancelSpeech() {
+    // [SM_DEBUG] Log cancel with context - hypothesis: unexpected cancels may cause truncation
+    console.log('[SM_DEBUG] cancelSpeech() called', {
+      wasSpeaking: this.tts.isSpeaking(),
+      hadToken: !!this._currentSpeakToken,
+      callStack: new Error().stack?.split('\n').slice(1, 4).join(' <- '),
+      timestamp: Date.now()
+    });
     this.tts.cancel();
     this._currentSpeakToken = null;
     this._suspendedByTTS = false;
@@ -435,11 +564,22 @@ export class SpeechManager {
    * Enable VAD-driven listening
    */
   async enableVADMode() {
+    // [SM_DEBUG] Log VAD mode enable
+    console.log('[SM_DEBUG] enableVADMode() called', {
+      currentVadActive: this.vad.isActive(),
+      currentHarkActive: this.hark.isActive(),
+      isListening: this.isListening(),
+      isTTSSpeaking: this.isSpeakingNow(),
+      // Hypothesis: Enabling VAD while TTS is playing may cause immediate detection
+      timestamp: Date.now()
+    });
+
     this._vadModeEnabled = true;
     this._wantListening = true;
 
     if (this.isListening()) {
       console.info('SR is running, VAD will start after recognition ends');
+      console.log('[SM_DEBUG] enableVADMode - SR running, deferring VAD start', { timestamp: Date.now() });
       return;
     }
 
@@ -447,15 +587,19 @@ export class SpeechManager {
       // Ensure fallback is not running
       try { await this.hark.stop(); } catch {}
       try {
+        console.log('[SM_DEBUG] enableVADMode - starting VAD', { timestamp: Date.now() });
         await this.vad.start();
         console.info('Voice detection: VAD enabled');
+        console.log('[SM_DEBUG] enableVADMode - VAD started successfully', { timestamp: Date.now() });
         // Ensure hark stays stopped
         try { await this.hark.stop(); } catch {}
       } catch (e) {
         console.warn('VAD failed, falling back to Hark', e);
+        console.log('[SM_DEBUG] enableVADMode - VAD failed, trying Hark', { error: e.message, timestamp: Date.now() });
         try { await this.vad.stop(); } catch {}
         await this.hark.start();
         console.info('Voice detection: Hark fallback enabled');
+        console.log('[SM_DEBUG] enableVADMode - Hark started as fallback', { timestamp: Date.now() });
       }
     }
   }
@@ -464,18 +608,40 @@ export class SpeechManager {
    * Disable VAD-driven listening
    */
   async disableVADMode() {
+    // [SM_DEBUG] Log VAD mode disable
+    console.log('[SM_DEBUG] disableVADMode() called', {
+      vadWasActive: this.vad.isActive(),
+      harkWasActive: this.hark.isActive(),
+      timestamp: Date.now()
+    });
+
     this._vadModeEnabled = false;
     this._wantListening = false;
     // Stop both detectors
     try { await this.vad.stop(); } catch {}
     try { await this.hark.stop(); } catch {}
     await this.stopListening();
+    console.log('[SM_DEBUG] disableVADMode - completed', { timestamp: Date.now() });
   }
 
   /**
    * Whether we should ignore speech-start events (e.g., during TTS or disabled)
    */
   shouldIgnoreSpeechStart() {
+    const shouldIgnore = !this._wantListening || this.isSpeakingNow() || !!this._currentSpeakToken;
+
+    // [SM_DEBUG] Log ignore decision with reasons - CRITICAL for understanding truncation
+    console.log('[SM_DEBUG] shouldIgnoreSpeechStart() evaluated', {
+      result: shouldIgnore,
+      reasons: {
+        notWantListening: !this._wantListening,
+        isSpeakingNow: this.isSpeakingNow(),
+        hasCurrentSpeakToken: !!this._currentSpeakToken
+      },
+      // Hypothesis: If this returns false while TTS is actually playing, VAD will interrupt
+      timestamp: Date.now()
+    });
+
     if (!this._wantListening) return true;
     if (this.isSpeakingNow()) return true;
     if (this._currentSpeakToken) return true;
