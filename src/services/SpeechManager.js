@@ -248,7 +248,7 @@ export class SpeechManager {
   async speak(text, options = {}) {
     const speakId = ++this._debugSpeakId;
     const startTime = Date.now();
-    const vadWasActive = this.vad.isActive();
+    const vadWasActive = this.vad.isActive() || this.vad.isStarting();
     const harkWasActive = this.hark.isActive();
     const detectorWasActive = vadWasActive || harkWasActive;
 
@@ -258,7 +258,9 @@ export class SpeechManager {
       textPreview: text?.substring(0, 50),
       ttsEnabled: this.tts.isEnabled(),
       ttsSupported: this.tts.isSupported(),
-      vadActive: vadWasActive,
+      vadActive: this.vad.isActive(),
+      vadStarting: this.vad.isStarting(),
+      vadWasActiveOrStarting: vadWasActive,
       harkActive: harkWasActive,
       isListening: this.isListening(),
       vadModeEnabled: this._vadModeEnabled,

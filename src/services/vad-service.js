@@ -31,6 +31,10 @@ export class VADService {
 		return this.active;
 	}
 
+	isStarting() {
+		return !!this._starting;
+	}
+
 	async start() {
 		// [VAD_DEBUG] Log start attempts
 		console.log('[VAD_DEBUG] start() called', {
