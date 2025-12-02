@@ -197,13 +197,20 @@ export class SpeechManager {
     }
     this._resumeTimer = setTimeout(async () => {
       this._resumeTimer = null;
-      if (this._isTTSActive() || !this._wantListening) {
+      if (this._isTTSActive() || !this._wantListening || this.isListening()) {
+        console.log('[SM_DEBUG] _resumeDetectorsAfterTTS - skipping VAD resume', {
+          ttsBusy: this._isTTSActive(),
+          wantListening: this._wantListening,
+          recognitionAlreadyActive: this.isListening(),
+          timestamp: Date.now()
+        });
         this._detectorsPausedByTTS = false;
         return;
       }
       this._detectorsPausedByTTS = false;
       if (this._prevDetector === 'vad') {
         try {
+          console.log('[SM_DEBUG] _resumeDetectorsAfterTTS - starting VAD', { timestamp: Date.now() });
           await this.vad.start();
         } catch (e) {
           console.warn('Failed to resume VAD, trying Hark:', e);
