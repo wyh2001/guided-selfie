@@ -137,8 +137,8 @@ export class SpeechManager {
     this.recognition.onEnd = async () => {
       console.info('Recognition session ended');
 
-      // Restart VAD if _vadModeEnabled OR _wantListening OR VAD is not already running
-      if (this._vadModeEnabled && this._wantListening && !this.vad.isActive()) {
+      const ttsBusy = this.isSpeakingNow() || this._currentSpeakToken;
+      if (this._vadModeEnabled && this._wantListening && !this.vad.isActive() && !ttsBusy) {
         try {
           console.info('Restarting VAD to listen for next speech');
           await this.vad.start();
