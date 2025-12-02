@@ -22,6 +22,9 @@ export class SpeechManager {
     this._suspendedByTTS = false;
     this._wantListening = false; // Whether user wants listening active
     this._vadModeEnabled = false;
+    this._detectorsPausedByTTS = false;
+    this._prevDetector = null; // 'vad' | 'hark' | null
+    this._resumeTimer = null;
     this._speakQueue = Promise.resolve();
     this._lastTranscript = { text: '', at: 0 };
     this._externalOnEnd = null;
@@ -81,8 +84,11 @@ export class SpeechManager {
     this.recognition.onEnd = async () => {
       console.info('Recognition session ended');
 
-      // Restart VAD if _vadModeEnabled OR _wantListening OR VAD is not already running
-      if (this._vadModeEnabled && this._wantListening && !this.vad.isActive()) {
+      // Wait before restarting VAD to avoid audio routing conflicts
+      await new Promise(r => setTimeout(r, 800));
+
+      const ttsBusy = this.isSpeakingNow() || this._currentSpeakToken || this._detectorsPausedByTTS;
+      if (this._vadModeEnabled && this._wantListening && !this.vad.isActive() && !ttsBusy) {
         try {
           console.info('Restarting VAD to listen for next speech');
           await this.vad.start();
@@ -108,6 +114,61 @@ export class SpeechManager {
     return this.vad.isActive() || this.hark.isActive();
   }
 
+  _isTTSActive() {
+    return this._currentSpeakToken != null || this.isSpeakingNow();
+  }
+
+  async _pauseDetectorsForTTS() {
+    if (this._resumeTimer) {
+      clearTimeout(this._resumeTimer);
+      this._resumeTimer = null;
+    }
+    this._detectorsPausedByTTS = true;
+    if (this.vad.isActive()) {
+      this._prevDetector = 'vad';
+    } else if (this.hark.isActive()) {
+      this._prevDetector = 'hark';
+    } else {
+      this._prevDetector = this._vadModeEnabled ? 'vad' : null;
+    }
+    await this.vad.stop();
+    await this.hark.stop();
+    await this._stopListeningInternal({ markSuspended: true });
+  }
+
+  async _resumeDetectorsAfterTTS(delayMs = 400) {
+    if (this._resumeTimer) {
+      clearTimeout(this._resumeTimer);
+    }
+    this._resumeTimer = setTimeout(async () => {
+      this._resumeTimer = null;
+      if (this._isTTSActive() || !this._wantListening || this.isListening()) {
+        this._detectorsPausedByTTS = false;
+        return;
+      }
+      this._detectorsPausedByTTS = false;
+      if (this._prevDetector === 'vad') {
+        try {
+          await this.vad.start();
+        } catch (e) {
+          console.warn('Failed to resume VAD, trying Hark:', e);
+          try {
+            await this.hark.start();
+          } catch (e2) {
+            console.warn('Hark fallback also failed:', e2);
+          }
+        }
+      } else if (this._prevDetector === 'hark') {
+        try {
+          await this.hark.start();
+        } catch (e) {
+          console.warn('Failed to resume Hark:', e);
+        }
+      }
+      this._prevDetector = null;
+    }, delayMs);
+  }
+
   setupCommandProcessing() {
     this.recognition.onResult = (transcript) => {
       this.processCommand(transcript);
@@ -123,6 +184,9 @@ export class SpeechManager {
    * @returns {Promise<boolean>} - Whether speech was actually spoken
    */
   async speak(text, options = {}) {
+    // Check if detector was active/starting - need longer delay for audio routing
+    const detectorWasActive = this.vad.isActive() || this.vad.isStarting() || this.hark.isActive();
+
     // Do nothing if TTS is disabled or unsupported
     if (!this.tts.isEnabled() || !this.tts.isSupported() || !text?.trim()) {
       return false;
@@ -132,23 +196,16 @@ export class SpeechManager {
     const token = Symbol('speak');
     this._currentSpeakToken = token;
 
-    // Remember if listening (to restore later)
-    const wasListening = this.isListening();
-    if (wasListening) {
-      await this._stopListeningInternal({ markSuspended: true });
-    }
+    await this._pauseDetectorsForTTS();
+    const preTTSDelay = detectorWasActive ? 800 : 500;
+    await new Promise(r => setTimeout(r, preTTSDelay));
 
     // Speak
     const success = await this.tts.speakAsync(text, options);
 
     if (this._currentSpeakToken === token) {
       this._currentSpeakToken = null;
-
-      // Restore only if suspended by TTS and previously active
-      if (this._suspendedByTTS && wasListening) {
-        await this._startListeningInternal();
-      }
-      this._suspendedByTTS = false;
+      this._resumeDetectorsAfterTTS(400);
     }
 
     return success;

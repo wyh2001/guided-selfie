@@ -17,6 +17,10 @@ export class VADService {
 		return this.active;
 	}
 
+	isStarting() {
+		return !!this._starting;
+	}
+
 	async start() {
 		if (this.active) return;
 		if (this._starting) return this._starting;

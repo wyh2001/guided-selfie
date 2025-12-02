@@ -52,15 +52,16 @@ export class TextToSpeechService {
    * @param {Object} options - Optional parameters (rate, pitch, volume)
    * @returns {Promise<boolean>} - Resolves to true if speech completed, false if not started or failed
    */
-  speakAsync(text, options = {}) {
+  async speakAsync(text, options = {}) {
     // Only speak if enabled
     if (!this.enabled || !this.synthesis || !text?.trim()) {
       return Promise.resolve(false);
     }
-    
-    // Cancel any ongoing speech
+
+    // Cancel any ongoing speech and wait briefly for audio routing to settle
     this.synthesis.cancel();
-    
+    await new Promise(r => setTimeout(r, 50));
+
     const utterance = new SpeechSynthesisUtterance(text);
     
     // Use custom voice if set
