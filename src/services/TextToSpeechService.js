@@ -49,7 +49,7 @@ export class TextToSpeechService {
   /**
    * Speak the given text asynchronously (Promise-based)
    * @param {string} text - Text to speak
-   * @param {Object} options - Optional parameters (rate, pitch, volume, timeout)
+   * @param {Object} options - Optional parameters (rate, pitch, volume)
    * @returns {Promise<boolean>} - Resolves to true if speech completed, false if not started or failed
    */
   speakAsync(text, options = {}) {
@@ -74,34 +74,17 @@ export class TextToSpeechService {
     utterance.volume = options.volume ?? this.volume;
 
     return new Promise((resolve) => {
-      let timeoutId = null;
-      let resolved = false;
-
-      const cleanup = (result) => {
-        if (resolved) return;
-        resolved = true;
-        if (timeoutId) clearTimeout(timeoutId);
-        resolve(result);
-      };
-
-      utterance.onend = () => cleanup(true);
+      utterance.onend = () => resolve(true);
       utterance.onerror = (error) => {
         console.warn('Speech synthesis error:', error);
-        cleanup(false);
+        resolve(false);
       };
-
-      const timeout = options.timeout ?? 7000;
-      timeoutId = setTimeout(() => {
-        console.warn('Speech synthesis timeout after', timeout, 'ms');
-        this.synthesis.cancel();
-        cleanup(false);
-      }, timeout);
 
     try {
       this.synthesis.speak(utterance);
     } catch (error) {
         console.error('Failed to initiate speech:', error);
-        cleanup(false);
+        resolve(false);
       }
     });
   }
