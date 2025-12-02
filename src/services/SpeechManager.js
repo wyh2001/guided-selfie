@@ -228,6 +228,7 @@ export class SpeechManager {
 
     await this.vad.stop();
     await this.hark.stop();
+    await new Promise(r => setTimeout(r, 150));
 
     // [SM_DEBUG] Log TTS start
     this._debugLastTTSStartTime = Date.now();
