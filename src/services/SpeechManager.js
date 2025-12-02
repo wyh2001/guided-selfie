@@ -140,6 +140,8 @@ export class SpeechManager {
     this.recognition.onEnd = async () => {
       console.info('Recognition session ended');
 
+      await new Promise(r => setTimeout(r, 800));
+
       const ttsBusy = this.isSpeakingNow() || this._currentSpeakToken || this._detectorsPausedByTTS;
       if (this._vadModeEnabled && this._wantListening && !this.vad.isActive() && !ttsBusy) {
         try {
@@ -268,7 +270,7 @@ export class SpeechManager {
 
     console.log(`[SM_DEBUG] speak() #${speakId} pausing detectors before TTS`, { timestamp: Date.now() });
     await this._pauseDetectorsForTTS();
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 500));
 
     // [SM_DEBUG] Log TTS start
     this._debugLastTTSStartTime = Date.now();
