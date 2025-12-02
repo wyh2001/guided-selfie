@@ -129,8 +129,9 @@ export class TextToSpeechService {
       utterance.onstart = () => {
         utteranceStartTime = Date.now();
         this._debugLastSpeechStart = utteranceStartTime;
+        const timeSinceRequest = utteranceStartTime - startTime;
         console.log(`[TTS_DEBUG] #${speechId} utterance.onstart fired`, {
-          timeSinceRequest: utteranceStartTime - startTime,
+          timeSinceRequest,
           synthesisState: {
             speaking: this.synthesis.speaking,
             pending: this.synthesis.pending,
@@ -139,11 +140,50 @@ export class TextToSpeechService {
           // Hypothesis: Long delay between request and start may indicate queue issues
           timestamp: utteranceStartTime
         });
+
+        // [TTS_DEBUG] CRITICAL: Log audio context state if available
+        // Hypothesis: AudioContext may be in a state that causes initial audio to be clipped
+        try {
+          const audioCtx = window.AudioContext || window.webkitAudioContext;
+          if (audioCtx) {
+            const ctx = new audioCtx();
+            console.log(`[TTS_DEBUG] #${speechId} AudioContext state at TTS start`, {
+              state: ctx.state,
+              sampleRate: ctx.sampleRate,
+              baseLatency: ctx.baseLatency,
+              outputLatency: ctx.outputLatency,
+              // Hypothesis: High latency values may indicate audio system busy with mic input
+              timestamp: Date.now()
+            });
+            ctx.close();
+          }
+        } catch (e) {
+          console.log(`[TTS_DEBUG] #${speechId} Could not check AudioContext`, { error: e.message });
+        }
       };
 
       // [TTS_DEBUG] Track word boundaries - hypothesis: speech may be cut mid-word
+      // CRITICAL: First boundary event tells us when audio actually starts being heard
+      let firstBoundaryTime = null;
       utterance.onboundary = (event) => {
         boundaryCount++;
+        if (boundaryCount === 1) {
+          firstBoundaryTime = Date.now();
+          const timeSinceOnStart = utteranceStartTime ? firstBoundaryTime - utteranceStartTime : 'unknown';
+          // [TTS_DEBUG] CRITICAL: Time from onstart to first boundary = audio actually audible
+          console.log(`[TTS_DEBUG] #${speechId} FIRST BOUNDARY - audio now audible`, {
+            name: event.name,
+            charIndex: event.charIndex,
+            timeSinceOnStart,
+            // Hypothesis: If charIndex > 0 at first boundary, initial text was already "spoken" but not heard
+            // This would confirm audio clipping at start
+            initialCharsClipped: event.charIndex,
+            textPreview: text.substring(0, event.charIndex + 10),
+            // Hypothesis: Long timeSinceOnStart with charIndex > 0 = audio system delay clipping start
+            possibleStartClipping: event.charIndex > 0,
+            timestamp: firstBoundaryTime
+          });
+        }
         // Log every 5th boundary to avoid spam, but always log first few
         if (boundaryCount <= 3 || boundaryCount % 5 === 0) {
           console.log(`[TTS_DEBUG] #${speechId} utterance.onboundary #${boundaryCount}`, {
@@ -185,6 +225,9 @@ export class TextToSpeechService {
           // Rough estimate: ~150 words/min = ~750 chars/min = ~12.5 chars/sec
           expectedMinDuration: Math.floor(text.length / 15 * 1000), // conservative estimate
           possibleTruncation: typeof duration === 'number' && duration < (text.length / 15 * 1000) * 0.5,
+          // [TTS_DEBUG] CRITICAL: If totalBoundaries is 0, we have no boundary events
+          // This means we can't detect mid-speech clipping, only timing-based truncation
+          noBoundaryEvents: boundaryCount === 0,
           synthesisState: {
             speaking: this.synthesis.speaking,
             pending: this.synthesis.pending,
@@ -192,6 +235,17 @@ export class TextToSpeechService {
           },
           timestamp: endTime
         });
+
+        // [TTS_DEBUG] CRITICAL SUMMARY for this speech
+        if (boundaryCount === 0) {
+          console.log(`[TTS_DEBUG] #${speechId} ⚠️ NO BOUNDARY EVENTS - cannot detect word-level clipping`, {
+            text: text.substring(0, 50),
+            // Hypothesis: Some browsers/devices don't fire boundary events
+            // This makes it impossible to detect if initial words were clipped
+            timestamp: Date.now()
+          });
+        }
+
         resolve(true);
       };
 

@@ -226,12 +226,28 @@ export class SpeechManager {
       await this._stopListeningInternal({ markSuspended: true });
     }
 
+    // [SM_DEBUG] CRITICAL HYPOTHESIS: VAD active during TTS may cause audio routing issues
+    // On mobile, the audio system may need time to switch from input (mic) to output (speaker)
+    // This could cause the first few hundred ms of TTS to be "swallowed"
+    const vadActiveBeforeTTS = this.vad.isActive();
+    const harkActiveBeforeTTS = this.hark.isActive();
+
+    // [SM_DEBUG] Try stopping VAD/Hark before TTS to test hypothesis
+    if (vadActiveBeforeTTS || harkActiveBeforeTTS) {
+      console.log(`[SM_DEBUG] speak() #${speakId} HYPOTHESIS TEST: VAD/Hark active before TTS - this may cause audio clipping on mobile`, {
+        vadActive: vadActiveBeforeTTS,
+        harkActive: harkActiveBeforeTTS,
+        // Hypothesis: Stopping VAD before TTS may fix the audio clipping issue
+        timestamp: Date.now()
+      });
+    }
+
     // [SM_DEBUG] Log TTS start
     this._debugLastTTSStartTime = Date.now();
     console.log(`[SM_DEBUG] speak() #${speakId} calling tts.speakAsync()`, {
       vadStillActive: this.vad.isActive(),
       harkStillActive: this.hark.isActive(),
-      // Hypothesis: If VAD/Hark still active here, they will hear TTS
+      // Hypothesis: If VAD/Hark still active here, audio routing conflict may clip TTS start
       timestamp: this._debugLastTTSStartTime
     });
 
