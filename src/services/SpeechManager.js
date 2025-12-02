@@ -22,6 +22,9 @@ export class SpeechManager {
     this._suspendedByTTS = false;
     this._wantListening = false; // Whether user wants listening active
     this._vadModeEnabled = false;
+    this._detectorsPausedByTTS = false;
+    this._prevDetector = null; // 'vad' | 'hark' | null
+    this._resumeTimer = null;
     this._speakQueue = Promise.resolve();
     this._lastTranscript = { text: '', at: 0 };
     this._externalOnEnd = null;
@@ -137,7 +140,7 @@ export class SpeechManager {
     this.recognition.onEnd = async () => {
       console.info('Recognition session ended');
 
-      const ttsBusy = this.isSpeakingNow() || this._currentSpeakToken;
+      const ttsBusy = this.isSpeakingNow() || this._currentSpeakToken || this._detectorsPausedByTTS;
       if (this._vadModeEnabled && this._wantListening && !this.vad.isActive() && !ttsBusy) {
         try {
           console.info('Restarting VAD to listen for next speech');
@@ -162,6 +165,61 @@ export class SpeechManager {
    */
   isVADModeActive() {
     return this.vad.isActive() || this.hark.isActive();
+  }
+
+  _isTTSActive() {
+    return this._currentSpeakToken != null || this.isSpeakingNow();
+  }
+
+  async _pauseDetectorsForTTS() {
+    if (this._resumeTimer) {
+      clearTimeout(this._resumeTimer);
+      this._resumeTimer = null;
+    }
+    this._detectorsPausedByTTS = true;
+    if (this.vad.isActive()) {
+      this._prevDetector = 'vad';
+    } else if (this.hark.isActive()) {
+      this._prevDetector = 'hark';
+    } else {
+      this._prevDetector = this._vadModeEnabled ? 'vad' : null;
+    }
+    await this.vad.stop();
+    await this.hark.stop();
+    await this._stopListeningInternal({ markSuspended: true });
+  }
+
+  async _resumeDetectorsAfterTTS(delayMs = 400) {
+    if (this._resumeTimer) {
+      clearTimeout(this._resumeTimer);
+    }
+    this._resumeTimer = setTimeout(async () => {
+      this._resumeTimer = null;
+      if (this._isTTSActive() || !this._wantListening) {
+        this._detectorsPausedByTTS = false;
+        return;
+      }
+      this._detectorsPausedByTTS = false;
+      if (this._prevDetector === 'vad') {
+        try {
+          await this.vad.start();
+        } catch (e) {
+          console.warn('Failed to resume VAD, trying Hark:', e);
+          try {
+            await this.hark.start();
+          } catch (e2) {
+            console.warn('Hark fallback also failed:', e2);
+          }
+        }
+      } else if (this._prevDetector === 'hark') {
+        try {
+          await this.hark.start();
+        } catch (e) {
+          console.warn('Failed to resume Hark:', e);
+        }
+      }
+      this._prevDetector = null;
+    }, delayMs);
   }
 
   setupCommandProcessing() {
@@ -208,26 +266,8 @@ export class SpeechManager {
     const token = Symbol('speak');
     this._currentSpeakToken = token;
 
-    // Remember if listening (to restore later)
-    const wasListening = this.isListening();
-    const wasVadActive = this.vad.isActive();
-    const wasHarkActive = this.hark.isActive();
-
-    console.log(`[SM_DEBUG] speak() #${speakId} state before TTS`, {
-      wasListening,
-      wasVadActive,
-      wasHarkActive,
-      // Hypothesis: Not stopping VAD/Hark before TTS may cause them to detect TTS audio
-      timestamp: Date.now()
-    });
-
-    if (wasListening) {
-      console.log(`[SM_DEBUG] speak() #${speakId} stopping listening before TTS`, { timestamp: Date.now() });
-      await this._stopListeningInternal({ markSuspended: true });
-    }
-
-    await this.vad.stop();
-    await this.hark.stop();
+    console.log(`[SM_DEBUG] speak() #${speakId} pausing detectors before TTS`, { timestamp: Date.now() });
+    await this._pauseDetectorsForTTS();
     await new Promise(r => setTimeout(r, 300));
 
     // [SM_DEBUG] Log TTS start
@@ -258,13 +298,8 @@ export class SpeechManager {
 
     if (this._currentSpeakToken === token) {
       this._currentSpeakToken = null;
-
-      // Restore only if suspended by TTS and previously active
-      if (this._suspendedByTTS && wasListening) {
-        console.log(`[SM_DEBUG] speak() #${speakId} restoring listening after TTS`, { timestamp: Date.now() });
-        await this._startListeningInternal();
-      }
-      this._suspendedByTTS = false;
+      console.log(`[SM_DEBUG] speak() #${speakId} scheduling detector resume after TTS`, { timestamp: Date.now() });
+      this._resumeDetectorsAfterTTS(400);
     } else {
       console.log(`[SM_DEBUG] speak() #${speakId} token invalidated - newer speak in progress`, { timestamp: Date.now() });
     }
